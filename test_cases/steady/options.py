@@ -5,7 +5,7 @@ from thetis.configuration import PositiveFloat, PositiveInteger
 __all__ = ["SteadyTurbineOptions"]
 
 
-class SteadyTurbineOptions(options.FarmOptions):
+class SteadyTurbineOptions(FarmOptions):
 
     # Turbine parameters
     turbine_diameter = PositiveFloat(18.0).tag(config=False)

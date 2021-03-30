@@ -5,7 +5,7 @@ from thetis.configuration import PositiveFloat, PositiveInteger
 __all__ = ["TurbineOptions"]
 
 
-class TurbineOptions(options.FarmOptions):
+class TurbineOptions(FarmOptions):
     """
     Parameters for a simple test case involving a single
     turbine. The test case is based on the flow around a
