@@ -1,6 +1,7 @@
 data/
 outputs/
 plots/
+resources/
 __pycache__/
 
 turbine_adapt.egg-info
