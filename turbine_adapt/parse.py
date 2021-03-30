@@ -66,7 +66,7 @@ class Parser(object):
         self._added[tag] = default
 
     def parse_args(self):
-        from collections import AttrDict
+        from thetis.utility import AttrDict
         parsed = self._parser.parse_args()
         out = AttrDict()
         for tag in self._added:

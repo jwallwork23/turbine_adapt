@@ -18,7 +18,7 @@ class FarmSolver(solver2d.FlowSolver2d):
         self.i_export = 0
         self.next_export_t = self.simulation_time + options.simulation_export_time
 
-        self.callbacks = callback.CallbackManager()
+        self.callbacks = thetis.callback.CallbackManager()
         self.fields = FieldDict()
         self.function_spaces = AttrDict()
         self.fields.bathymetry_2d = options.bathymetry2d
