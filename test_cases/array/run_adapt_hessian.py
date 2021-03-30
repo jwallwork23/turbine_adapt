@@ -1,4 +1,3 @@
-from pyroteus import *
 from turbine_adapt import *
 from options import ArrayOptions
 
