@@ -1,5 +1,4 @@
 from turbine_adapt import *
-from turbine_adapt.callback import PeakVorticityCallback, PowerOutputCallback
 from options import TwoTurbineOptions
 
 
