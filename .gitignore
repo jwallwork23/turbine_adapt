@@ -1,0 +1,14 @@
+data/
+outputs/
+plots/
+__pycache__/
+
+turbine_adapt.egg-info
+
+*.jpg
+*.msh
+*.pdf
+*.png
+*.pvd
+*.swp
+*.vtu
