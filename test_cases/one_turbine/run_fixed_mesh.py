@@ -26,7 +26,7 @@ if args.plot_drag:
         msg = "Will not attempt to plot with {:d} processors. Run again in serial."
         print_output(msg.format(COMM_WORLD.size))
         sys.exit(0)
-	from turbine_adapt.plotting import *
+    from turbine_adapt.plotting import *
     fig, axes = plt.subplots(figsize=(9.5, 3.5))
     eps = 1.0e-05
     cd_max = options.quadratic_drag_coefficient.vector().gather().max()

@@ -1,8 +1,8 @@
 import matplotlib
-import matplotlib.patches as ptch
-import matplotlib.pyplot as plt
-from mpltools import annotation
-import os
+import matplotlib.patches as ptch  # noqa
+import matplotlib.pyplot as plt  # noqa
+from mpltools import annotation  # noqa
+import os  # noqa
 
 
 matplotlib.rc('text', usetex=True)
