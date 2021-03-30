@@ -39,11 +39,14 @@ class Parser(object):
             'h_max': {'type': float, 'msg': """
                 Maximum tolerated element size in metres (default {:.4e}.
                 """},
-            'plot_metric': {'type': bool, 'msg': """
-                Toggle plotting of metric field (default {:b}).
-                """},
             'plot_bathymetry': {'type': bool, 'msg': """
                 Toggle plotting of bathymetry field (default {:b}).
+                """},
+            'plot_drag': {'type': bool, 'msg': """
+                Toggle plotting of drag field (default {:b}).
+                """},
+            'plot_metric': {'type': bool, 'msg': """
+                Toggle plotting of metric field (default {:b}).
                 """},
             'load_metric': {'type': bool, 'msg': """
                 Toggle loading metric data from file (default {:b}).
