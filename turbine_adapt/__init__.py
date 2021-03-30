@@ -4,4 +4,4 @@ import os  # noqa
 from pyroteus import *  # noqa
 from thetis import *  # noqa
 
-from .argparse import Parser  # noqa
+from .parse import Parser  # noqa
