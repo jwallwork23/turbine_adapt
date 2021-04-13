@@ -1,4 +1,5 @@
 from turbine_adapt import *
+import itertools
 from options import ArrayOptions
 
 
@@ -45,7 +46,6 @@ stashed_metric = os.path.join(di, fname)
 initial_metric = os.path.join(di, fname if args.load_metric else 'initial_' + fname)
 stashed_mesh = os.path.join(di, 'mesh_{:d}_level{:d}')
 for fp_iteration in range(args.maxiter + 1):
-    outfiles = {}
     if fp_iteration == args.maxiter:
         converged = True
         if converged_reason is None:
@@ -104,12 +104,8 @@ for fp_iteration in range(args.maxiter + 1):
         # Set initial conditions for current mesh iteration, ensuring exports are not overwritten
         if i == 0:
             options.apply_initial_conditions(solver_obj)
-            for f in options.fields_to_export:
-                outfiles[f] = solver_obj.exporters['vtk'].exporters[f].outfile
-            if converged:
-                outfiles['vorticity'] = cb._outfile
         else:
-            solver_obj.create_exporters(outfiles=outfiles)
+            solver_obj.create_exporters()
             assert q is not None
             uv, elev = q.split()
             solver_obj.assign_initial_conditions(uv=uv, elev=elev)
@@ -117,11 +113,11 @@ for fp_iteration in range(args.maxiter + 1):
             solver_obj.next_export_t = i_export*export_time
             solver_obj.iteration = int(np.ceil(solver_obj.next_export_t/options.timestep))
             solver_obj.simulation_time = solver_obj.iteration*options.timestep
+            solver_obj.export_initial_state = False
             for f in options.fields_to_export:
-                # solver_obj.exporters['vtk'].exporters[f].outfile = outfiles[f]
-                solver_obj.exporters['vtk'].exporters[f].outfile._topology = None
+                solver_obj.exporters['vtk'].exporters[f].set_next_export_ix(i_export + 1)
             if converged:
-                cb._outfile = outfiles['vorticity']
+                cb._outfile.counter = itertools.count(start=i_export + 1)
 
         def export_func():
             """
