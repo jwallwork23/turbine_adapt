@@ -1,4 +1,5 @@
 from turbine_adapt import *
+from firedrake_adjoint import Control
 from firedrake.adjoint.blocks import GenericSolveBlock
 import pyadjoint
 import itertools
@@ -27,43 +28,44 @@ for i, subdomain_id in enumerate(options.farm_ids):
     Ct = Ct + ct*interpolate(Constant(1.0), P0, subset=subset)
 
 
-def solver(ic, t_start, t_end, dt, J=0, qoi=None, recover_vorticity=False):
+def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
     """
     Solve forward over time window
     (`t_start`, `t_end`) in P1DG-P1DG space.
     """
+    recover_vorticity = model_options.pop('recover_vorticity', False)
+    model_options.setdefault('no_exports', True)
     options.simulation_end_time = t_end
-    if np.isclose(t_end, end_time):
-        options.simulation_end_time += 0.5*options.timestep
+    # if np.isclose(t_end, end_time):
+    #     options.simulation_end_time += 0.5*options.timestep
     i_export = int(t_start/options.simulation_export_time)
 
     # Create a new solver object and assign boundary conditions
     solver_obj = FarmSolver(options)
     options.apply_boundary_conditions(solver_obj)
     options.J = J
+    options.update(model_options)
+    options.fields_to_export = [] if options.no_exports else ['uv_2d', 'elev_2d']
 
     # Callback which recovers vorticity
     if recover_vorticity:
         cb = PeakVorticityCallback(solver_obj)
-        cb._create_new_file = i == 0
+        cb._create_new_file = i_export == 0
         solver_obj.add_callback(cb, 'timestep')
-        if i > 0:
+        if i_export > 0:
             cb._outfile.counter = itertools.count(start=i_export + 1)  # FIXME
 
     # Set initial conditions for current mesh iteration
-    if i == 0:
-        options.apply_initial_conditions(solver_obj)
-    else:
-        solver_obj.create_exporters()
-        uv, elev = ic.split()
-        solver_obj.assign_initial_conditions(uv=uv, elev=elev)
-        solver_obj.i_export = i_export
-        solver_obj.next_export_t = i_export*options.simulation_export_time
-        solver_obj.iteration = int(np.ceil(solver_obj.next_export_t/options.timestep))
-        solver_obj.simulation_time = t_start
-        solver_obj.export_initial_state = False
-        for f in options.fields_to_export:
-            solver_obj.exporters['vtk'].exporters[f].set_next_export_ix(i_export + 1)
+    solver_obj.create_exporters()
+    uv, elev = ic.split()
+    solver_obj.assign_initial_conditions(uv=uv, elev=elev)
+    solver_obj.i_export = i_export
+    solver_obj.next_export_t = i_export*options.simulation_export_time
+    solver_obj.iteration = int(np.ceil(solver_obj.next_export_t/options.timestep))
+    solver_obj.simulation_time = t_start
+    solver_obj.export_initial_state = False
+    for f in options.fields_to_export:
+        solver_obj.exporters['vtk'].exporters[f].set_next_export_ix(i_export + 1)
 
     def update_forcings(t):
         options.update_forcings(t)
@@ -108,7 +110,6 @@ def test_adjoint_same_mesh():
     """
     **Disclaimer: largely copied from pyroteus/test/test_adjoint.py
     """
-    from firedrake_adjoint import Control
 
     # Setup
     print_output("\n--- Setting up\n")
@@ -136,10 +137,12 @@ def test_adjoint_same_mesh():
     qois = [J]
 
     # Loop over having one or two subintervals
-    for spaces in ([fs], [fs, fs]):
+    # for spaces in ([fs], [fs, fs]):
+    for spaces in ([fs, fs], ):  # TODO: TEMP
         N = len(spaces)
         plural = '' if N == 1 else 's'
         print_output(f"\n --- Solving the adjoint problem on {N} subinterval{plural} using pyroteus\n")
+
         # Solve forward and adjoint on each subinterval
         J, adj_sols = solve_adjoint(
             solver, initial_condition, qoi, spaces, end_time, dt,
@@ -150,6 +153,16 @@ def test_adjoint_same_mesh():
 
         # Check energy outputs match
         assert np.isclose(*qois[::N]), f"QoIs do not match ({qois[0]} vs. {qois[-1]})"
+
+        # TODO: TEMP
+        if N == 2:
+            outfile = File('outputs/fixed_mesh/Adjoint2d_2mesh/Adjoint2d.pvd')
+            for i in (0, 1):
+                for adj_sol in adj_sols[i]:
+                    z, zeta = adj_sol.split()
+                    z.rename("Adjoint velocity")
+                    zeta.rename("Adjoint elevation")
+                    outfile.write(z, zeta)
 
         # Check adjoint solutions at initial time match
         err = errornorm(*final_adj_sols[::N])/norm(final_adj_sols[0])
@@ -164,8 +177,10 @@ if __name__ == "__main__":
     """
     Solve over the subintervals in sequence
     """
-    num_meshes = 5
+    # num_meshes = 5
+    num_meshes = 1
     q = initial_condition(function_space)
+    control = Control(q)  # FIXME: gradient w.r.t. mixed function not correct
     J = 0
     dt = options.timestep
     mesh_iteration_time = end_time/num_meshes
@@ -173,5 +188,24 @@ if __name__ == "__main__":
     for i in range(num_meshes):
         t_start = i*mesh_iteration_time
         t_end = (i+1)*mesh_iteration_time
-        q, J = solver(q, t_start, t_end, dt, J=J, qoi=lambda *args: assemble(qoi(*args)))
+        q, J = solver(
+            q, t_start, t_end, dt,
+            J=J, qoi=lambda *args: assemble(qoi(*args)),
+            no_exports=False,
+        )
     print_output(f"Energy output = {J/3600000} kW h")
+    pyadjoint.compute_gradient(J, control)
+    tape = pyadjoint.get_working_tape()
+    num_timesteps = int(end_time/dt)
+    solves_per_dt = 1
+    solve_blocks = [
+        block for block in tape.get_blocks()
+        if issubclass(block.__class__, GenericSolveBlock)
+        and block.adj_sol is not None
+    ][-num_timesteps*solves_per_dt::solves_per_dt]
+    outfile = File('outputs/fixed_mesh/Adjoint2d/Adjoint2d.pvd')
+    for block in reversed(solve_blocks):
+        z, zeta = block.adj_sol.split()
+        z.rename("Adjoint velocity")
+        zeta.rename("Adjoint elevation")
+        outfile.write(z, zeta)
