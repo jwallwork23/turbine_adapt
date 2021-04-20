@@ -106,7 +106,7 @@ def initial_condition(fs):
 # standard tests for pytest
 # ---------------------------
 
-def test_adjoint_same_mesh(plot=True):
+def test_adjoint_same_mesh(plot=False):
     """
     **Disclaimer: largely copied from pyroteus/test/test_adjoint.py
     """
@@ -144,7 +144,7 @@ def test_adjoint_same_mesh(plot=True):
         print_output(f"\n --- Solving the adjoint problem on {N} subinterval{plural} using pyroteus\n")
 
         # Solve forward and adjoint on each subinterval
-        J, adj_sols = solve_adjoint(
+        J, solutions = solve_adjoint(
             solver, initial_condition, qoi, spaces, end_time, dt,
             timesteps_per_export=dt_per_export, solves_per_timestep=solves_per_dt,
         )
@@ -153,8 +153,8 @@ def test_adjoint_same_mesh(plot=True):
         if plot:
             outfile = File(f'outputs/fixed_mesh/Adjoint2d_{N}mesh/Adjoint2d.pvd')
             for i in reversed(range(N)):
-                for j, adj_sol in enumerate(reversed(adj_sols[i])):
-                    if i < N-1 and j == len(adj_sols[i])-1:
+                for j, adj_sol in enumerate(reversed(solutions['adjoint'][i])):
+                    if i < N-1 and j == len(solutions['adjoint'][i])-1:
                         continue
                     z, zeta = adj_sol.split()
                     z.rename("Adjoint velocity")
@@ -165,7 +165,7 @@ def test_adjoint_same_mesh(plot=True):
         assert np.isclose(_J, J), f"{N} meshes: QoIs do not match ({_J} vs. {J})"
 
         # Check adjoint solutions at initial time match
-        err = errornorm(_adj_sol, adj_sols[0][0])/norm(_adj_sol)
+        err = errornorm(_adj_sol, solutions['adjoint'][0][0])/norm(_adj_sol)
         assert np.isclose(err, 0.0), f"{N} meshes: Non-zero adjoint error ({err})"
 
 
