@@ -149,7 +149,7 @@ solve_blocks = [
 outfile = File('outputs/fixed_mesh/Adjoint2d/Adjoint2d.pvd')
 h5_dir = create_directory('outputs/fixed_mesh/Adjoint2d/hdf5')
 dt_per_export = int(options.simulation_export_time/dt)
-solves_per_export = solves_per_export*dt_per_export
+solves_per_export = solves_per_dt*dt_per_export
 for i in range(len(solve_blocks)):
     if i % solves_per_export == 0:
         for j in range(2):

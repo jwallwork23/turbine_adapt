@@ -1,12 +1,12 @@
 from turbine_adapt import *
 from firedrake_adjoint import Control
-from firedrake.adjoint.blocks import GenericSolveBlock
+from firedrake.adjoint.blocks import GenericSolveBlock, ProjectBlock
 import pyadjoint
 import itertools
 from options import ArrayOptions
 
 
-end_time = 892.8
+end_time = 89.28
 
 # Set parameters
 options = ArrayOptions(level=0)
@@ -74,7 +74,7 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
 
     # Solve forward on current subinterval
     solver_obj.iterate(update_forcings=update_forcings, export_func=options.export_func)
-    return solver_obj.fields.solution_2d.copy(deepcopy=True), options.J
+    return solver_obj.fields.solution_2d, options.J
 
 
 def time_integrated_qoi(sol, t):
@@ -106,7 +106,7 @@ def initial_condition(fs):
 # standard tests for pytest
 # ---------------------------
 
-def test_adjoint_same_mesh():
+def test_adjoint_same_mesh(plot=True):
     """
     **Disclaimer: largely copied from pyroteus/test/test_adjoint.py
     """
@@ -131,14 +131,14 @@ def test_adjoint_same_mesh():
     solve_blocks = [
         block for block in tape.get_blocks()
         if issubclass(block.__class__, GenericSolveBlock)
+        and not issubclass(block.__class__, ProjectBlock)
         and block.adj_sol is not None
     ][-num_timesteps*solves_per_dt::solves_per_dt]
-    final_adj_sols = [solve_blocks[0].adj_sol]
-    qois = [J]
+    _adj_sol = solve_blocks[0].adj_sol.copy(deepcopy=True)
+    _J = J
 
     # Loop over having one or two subintervals
-    # for spaces in ([fs], [fs, fs]):
-    for spaces in ([fs, fs], ):  # TODO: TEMP
+    for spaces in ([fs], [fs, fs]):
         N = len(spaces)
         plural = '' if N == 1 else 's'
         print_output(f"\n --- Solving the adjoint problem on {N} subinterval{plural} using pyroteus\n")
@@ -148,25 +148,25 @@ def test_adjoint_same_mesh():
             solver, initial_condition, qoi, spaces, end_time, dt,
             timesteps_per_export=dt_per_export, solves_per_timestep=solves_per_dt,
         )
-        final_adj_sols.append(adj_sols[-1][-1])
-        qois.append(J)
 
-        # Check energy outputs match
-        assert np.isclose(*qois[::N]), f"QoIs do not match ({qois[0]} vs. {qois[-1]})"
-
-        # TODO: TEMP
-        if N == 2:
-            outfile = File('outputs/fixed_mesh/Adjoint2d_2mesh/Adjoint2d.pvd')
-            for i in (0, 1):
-                for adj_sol in adj_sols[i]:
+        # Plot adjoint solutions
+        if plot:
+            outfile = File(f'outputs/fixed_mesh/Adjoint2d_{N}mesh/Adjoint2d.pvd')
+            for i in reversed(range(N)):
+                for j, adj_sol in enumerate(reversed(adj_sols[i])):
+                    if i < N-1 and j == len(adj_sols[i])-1:
+                        continue
                     z, zeta = adj_sol.split()
                     z.rename("Adjoint velocity")
                     zeta.rename("Adjoint elevation")
                     outfile.write(z, zeta)
 
+        # Check energy outputs match
+        assert np.isclose(_J, J), f"{N} meshes: QoIs do not match ({_J} vs. {J})"
+
         # Check adjoint solutions at initial time match
-        err = errornorm(*final_adj_sols[::N])/norm(final_adj_sols[0])
-        assert np.isclose(err, 0.0), f"Non-zero adjoint error ({err})"
+        err = errornorm(_adj_sol, adj_sols[0][0])/norm(_adj_sol)
+        assert np.isclose(err, 0.0), f"{N} meshes: Non-zero adjoint error ({err})"
 
 
 # ---------------------------
@@ -183,6 +183,7 @@ if __name__ == "__main__":
     control = Control(q)  # FIXME: gradient w.r.t. mixed function not correct
     J = 0
     dt = options.timestep
+    dt_per_export = int(options.simulation_export_time/dt)
     mesh_iteration_time = end_time/num_meshes
     qoi = time_integrated_qoi
     for i in range(num_meshes):
@@ -201,11 +202,16 @@ if __name__ == "__main__":
     solve_blocks = [
         block for block in tape.get_blocks()
         if issubclass(block.__class__, GenericSolveBlock)
+        and not issubclass(block.__class__, ProjectBlock)
         and block.adj_sol is not None
     ][-num_timesteps*solves_per_dt::solves_per_dt]
     outfile = File('outputs/fixed_mesh/Adjoint2d/Adjoint2d.pvd')
-    for block in reversed(solve_blocks):
-        z, zeta = block.adj_sol.split()
+    z, zeta = Function(solve_blocks[0].function_space).split()
+    z.rename("Adjoint velocity")
+    zeta.rename("Adjoint elevation")
+    outfile.write(z, zeta)
+    for j in reversed(range(0, len(solve_blocks), dt_per_export)):
+        z, zeta = solve_blocks[j].adj_sol.split()
         z.rename("Adjoint velocity")
         zeta.rename("Adjoint elevation")
         outfile.write(z, zeta)
