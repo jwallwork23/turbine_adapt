@@ -9,16 +9,17 @@ parser = Parser(prog='turbine/array/run_goal_based.py')
 parser.add_argument('-level', 0, help="""
     Mesh resolution level inside the refined region.
     Choose a value from [0, 1, 2, 3, 4] (default 0).""")
-parser.add_argument('-num_tidal_cycles', 0.125)  # TODO: 1
-parser.add_argument('-num_meshes', 5)  # TODO: 80
-parser.add_argument('-maxiter', 1)  # TODO: 5
-parser.add_argument('-element_rtol', 0.01)
-parser.add_argument('-qoi_rtol', 0.01)
+parser.add_argument('-num_tidal_cycles', 0.25)  # TODO: 1
+parser.add_argument('-num_meshes', 10)  # TODO: 80
+parser.add_argument('-maxiter', 5)
+parser.add_argument('-element_rtol', 0.005)
+parser.add_argument('-qoi_rtol', 0.005)
 parser.add_argument('-norm_order', 1.0)
 parser.add_argument('-target', 5000.0)
 parser.add_argument('-h_min', 0.1)
 parser.add_argument('-h_max', 1000.0)
-parser.add_argument('-adjoint_projection', True)
+# parser.add_argument('-adjoint_projection', True)  # FIXME
+parser.add_argument('-adjoint_projection', False)
 parsed_args = parser.parse_args()
 num_meshes = parsed_args.num_meshes
 
@@ -39,15 +40,13 @@ solves_per_dt = 1
 meshes = [Mesh(options.mesh2d.coordinates) for i in range(num_meshes)]
 
 
-def solver(ic, t_start, t_end, dt, J=0, qoi=None, recover_vorticity=False):
+def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
     """
     Solve forward over time window
     (`t_start`, `t_end`) in P1DG-P1DG space.
     """
     mesh = ic.function_space().mesh()
-    options.create_tidal_farm(mesh=mesh)
-    P1 = get_functionspace(mesh, "CG", 1)
-    options.horizontal_viscosity = options.set_viscosity(P1)
+    options.rebuild_mesh_dependent_components(mesh)
     options.simulation_end_time = t_end
     i_export = int(np.round(t_start/options.simulation_export_time))
 
@@ -55,7 +54,11 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, recover_vorticity=False):
     solver_obj = FarmSolver(options, mesh=mesh)
     options.apply_boundary_conditions(solver_obj)
     options.J = J
-    options.no_exports = True
+    recover_vorticity = model_options.pop('recover_vorticity', False)
+    model_options.setdefault('no_exports', True)
+    options.update(model_options)
+    if not options.no_exports:
+        options.fields_to_export = ['uv_2d', 'elev_2d']
 
     # Callback which recovers vorticity
     if recover_vorticity:
@@ -138,30 +141,40 @@ for fp_iteration in range(parsed_args.maxiter+1):
     ]
 
     # Solve forward and adjoint on each subinterval
-    J, solutions = solve_adjoint(
-        solver, initial_condition, time_integrated_qoi, spaces, end_time, dt,
-        timesteps_per_export=dt_per_export, solves_per_timestep=solves_per_dt,
-        adjoint_projection=parsed_args.adjoint_projection,
-    )  # TODO: Option to just checkpoint only - use it if converged
+    args = (solver, initial_condition, time_integrated_qoi, spaces, end_time, dt)
+    if converged:
+        J, checkpoints = get_checkpoints(
+            *args, timesteps_per_export=dt_per_export, no_exports=False,
+        )
+    else:
+        J, solutions = solve_adjoint(
+            *args, timesteps_per_export=dt_per_export,
+            solves_per_timestep=solves_per_dt,
+            adjoint_projection=parsed_args.adjoint_projection,
+        )
 
     # Check for QoI convergence
     if J_old is not None:
         if abs(J - J_old) < parsed_args.qoi_rtol*J_old:
             converged = True
             converged_reason = 'converged quantity of interest'
+            J, checkpoints = get_checkpoints(
+                *args, timesteps_per_export=dt_per_export, no_exports=False,
+            )
+    J_old = J
 
-    # # Escape if converged  # TODO: USEME
-    # if converged:
-    #     print_output(f"Termination due to {converged_reason}")
-    #     break
+    # Escape if converged
+    if converged:
+        print_output(f"Termination due to {converged_reason} after {fp_iteration+1} iterations")
+        print_output(f"Energy output: {J/3.6e+09} MWh")
+        break
 
     # Create vtu output files
-    outdir = create_directory(os.path.join('outputs', 'fixed_mesh', f'{num_meshes}mesh'))
     outfiles = {
-        'forward': File(os.path.join(outdir, 'Forward2d.pvd')),
-        'forward_old': File(os.path.join(outdir, 'ForwardOld2d.pvd')),
-        'adjoint_next': File(os.path.join(outdir, 'AdjointNext2d.pvd')),
-        'adjoint': File(os.path.join(outdir, 'Adjoint2d.pvd')),
+        'forward': File(os.path.join(output_dir, 'Forward2d.pvd')),
+        'forward_old': File(os.path.join(output_dir, 'ForwardOld2d.pvd')),
+        'adjoint_next': File(os.path.join(output_dir, 'AdjointNext2d.pvd')),
+        'adjoint': File(os.path.join(output_dir, 'Adjoint2d.pvd')),
     }
     fields = ['forward', 'forward_old', 'adjoint_next', 'adjoint']
 
@@ -205,7 +218,7 @@ for fp_iteration in range(parsed_args.maxiter+1):
         difference_quotients.append(dq)
 
     # Plot difference quotient
-    outfiles['error'] = File(os.path.join(outdir, 'Indicator2d.pvd'))
+    outfiles['error'] = File(os.path.join(output_dir, 'Indicator2d.pvd'))
     difference_quotients = list(reversed(difference_quotients))
     for dq in difference_quotients:
         outfiles['error']._topology = None
@@ -220,7 +233,7 @@ for fp_iteration in range(parsed_args.maxiter+1):
     metrics = enforce_element_constraints(metrics, parsed_args.h_min, parsed_args.h_max)
 
     # Plot metrics
-    outfiles['metric'] = File(os.path.join(outdir, 'Metric2d.pvd'))
+    outfiles['metric'] = File(os.path.join(output_dir, 'Metric2d.pvd'))
     for metric in reversed(metrics):
         metric.rename("Metric")
         outfiles['metric']._topology = None
@@ -232,7 +245,7 @@ for fp_iteration in range(parsed_args.maxiter+1):
     num_cells = [mesh.num_cells() for mesh in meshes]
 
     # Plot meshes
-    outfiles['mesh'] = File(os.path.join(outdir, 'Mesh2d.pvd'))
+    outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
     for mesh in reversed(meshes):
         outfiles['mesh']._topology = None
         outfiles['mesh'].write(mesh.coordinates)

@@ -79,6 +79,16 @@ class ArrayOptions(FarmOptions):
         self.fields_to_export = ['uv_2d', 'elev_2d']
         self.fields_to_export_hdf5 = []
 
+    def rebuild_mesh_dependent_components(self, mesh, **kwargs):
+        """
+        Rebuild all attributes which depend on :attr:`mesh2d`.
+        """
+        self.create_tidal_farm(mesh=mesh)
+        P1 = get_functionspace(mesh, "CG", 1)
+        self.bathymetry2d = Function(P1, name='Bathymetry')
+        self.bathymetry2d.assign(self.depth)
+        self.horizontal_viscosity = self.set_viscosity(P1)
+
     def set_viscosity(self, fs):
         """
         Set the viscosity to be the :attr:`target_viscosity` in the tidal farm region and
