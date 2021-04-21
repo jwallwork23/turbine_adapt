@@ -1,10 +1,11 @@
 from turbine_adapt import *
+from turbine_adapt.error_estimation import ErrorEstimator
 import itertools
 from options import ArrayOptions
 
 
-end_time = 89.28
-num_meshes = 1
+end_time = 8928.0
+num_meshes = 80
 
 # Set parameters
 options = ArrayOptions(level=0)
@@ -112,13 +113,22 @@ J, solutions = solve_adjoint(
 )
 
 # Plot solutions
-fwd_outfile = File(f'outputs/fixed_mesh/{num_meshes}mesh/Forward2d.pvd')
-fwd_old_outfile = File(f'outputs/fixed_mesh/{num_meshes}mesh/ForwardOld2d.pvd')
-adj_outfile = File(f'outputs/fixed_mesh/{num_meshes}mesh/Adjoint2d.pvd')
-adj_next_outfile = File(f'outputs/fixed_mesh/{num_meshes}mesh/AdjointNext2d.pvd')
+outdir = create_directory(os.path.join('outputs', 'fixed_mesh', f'{num_meshes}mesh'))
+fwd_outfile = File(os.path.join(outdir, 'Forward2d.pvd'))
+fwd_old_outfile = File(os.path.join(outdir, 'ForwardOld2d.pvd'))
+adj_outfile = File(os.path.join(outdir, 'Adjoint2d.pvd'))
+adj_next_outfile = File(os.path.join(outdir, 'AdjointNext2d.pvd'))
+err_outfile = File(os.path.join(outdir, 'Indicator2d.pvd'))
+difference_quotients = []
 for i in range(num_meshes):
-    for j in range(len(solutions['adjoint'][i])):
-        if i < num_meshes-1 and j == len(solutions['adjoint'][i])-1:
+
+    # Create error estimator
+    ee = ErrorEstimator(options, mesh=options.mesh2d)  # NOTE: mesh will be passed in here
+    dq = Function(ee.P0, name="Difference quotient")
+
+    N = len(solutions['adjoint'][i])
+    for j in range(N):
+        if i < num_meshes-1 and j == N-1:
             continue
 
         # Forward
@@ -128,10 +138,10 @@ for i in range(num_meshes):
         fwd_outfile.write(u, eta)
 
         # Forward old
-        u, eta = solutions['forward_old'][i][j].split()
-        u.rename("Velocity")
-        eta.rename("Elevation")
-        fwd_old_outfile.write(u, eta)
+        u_old, eta_old = solutions['forward_old'][i][j].split()
+        u_old.rename("Velocity")
+        eta_old.rename("Elevation")
+        fwd_old_outfile.write(u_old, eta_old)
 
         # Adjoint
         z, zeta = solutions['adjoint'][i][j].split()
@@ -140,7 +150,19 @@ for i in range(num_meshes):
         adj_outfile.write(z, zeta)
 
         # Adjoint next
-        z, zeta = solutions['adjoint_next'][i][j].split()
-        z.rename("Adjoint velocity")
-        zeta.rename("Adjoint elevation")
-        adj_next_outfile.write(z, zeta)
+        z_next, zeta_next = solutions['adjoint_next'][i][j].split()
+        z_next.rename("Adjoint velocity")
+        zeta_next.rename("Adjoint elevation")
+        adj_next_outfile.write(z_next, zeta_next)
+
+        # Error indicator
+        _dq = ee.difference_quotient(u, eta, u_old, eta_old, z_next, zeta_next, z, zeta)
+
+        # Apply trapezium rule
+        if j in (0, N-1):
+            _dq *= 0.5
+        _dq *= dt
+        dq += _dq
+    difference_quotients.append(dq)
+for dq in reversed(difference_quotients):
+    err_outfile.write(dq)
