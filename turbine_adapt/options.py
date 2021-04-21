@@ -67,11 +67,13 @@ class FarmOptions(ModelOptions2d):
         correction = 4.0/(1.0 + np.sqrt(1.0 - c_T*swept_area/cross_sectional_area))
         return c_T*correction
 
-    def create_tidal_farm(self):
+    def create_tidal_farm(self, mesh=None):
         """
         Associate a tidal farm object with each farm ID, so that the power
         output of each turbine can be computed independently.
         """
+        if mesh is not None:
+            self.mesh2d = mesh
         assert hasattr(self, 'turbine_diameter')
         assert hasattr(self, 'farm_ids')
         assert len(self.farm_ids) > 0

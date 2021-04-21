@@ -6,10 +6,14 @@ class FarmSolver(solver2d.FlowSolver2d):
     Modified solver which accepts :class:`ModelOptions2d` objects
     with more attributes than expected.
     """
-    def __init__(self, options):
+    def __init__(self, options, mesh=None):
+        """
+        :arg options: :class:`FarmOptions` parameter object
+        :kwarg mesh: :class:`MeshGeometry` upon which to solve
+        """
         self._initialized = False
         self.options = options
-        self.mesh2d = options.mesh2d
+        self.mesh2d = mesh or options.mesh2d
         self.comm = self.mesh2d.comm
 
         self.dt = options.timestep
