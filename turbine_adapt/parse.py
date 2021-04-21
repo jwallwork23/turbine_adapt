@@ -2,18 +2,25 @@ __all__ = ["Parser"]
 
 
 class Parser(object):
+    """
+    Custom argument parser with pre-defined arguments which
+    allows setting defaults.
+    """
     def __init__(self, **kwargs):
         import argparse
         self._parser = argparse.ArgumentParser(**kwargs)
         self._help = {
             'approach': {'type': str, 'msg': """
-                Mesh adaptation approach (default 'fixed_mesh').
+                Mesh adaptation approach (default '{:s}').
                 """},
             'level': {'type': int, 'msg': """
                 Resolution level of initial mesh (default {:d}).
                 """},
             'end_time': {'type': float, 'msg': """
                 Simulation end time in seconds (default {:.1f}).
+                """},
+            'num_tidal_cycles': {'type': float, 'msg': """
+                Simulation end time in terms of tidal cycles (default {:.1f}).
                 """},
             'num_meshes': {'type': int, 'msg': """
                 Number of meshes in the fixed point iteration loop (default {:d}).
@@ -22,8 +29,11 @@ class Parser(object):
                 Maximum number of fixed point iterations (default {:d}). If set to zero,
                 mesh adaptation is not applied.
                 """},
-            'element_rtol': {'type': int, 'msg': """
+            'element_rtol': {'type': float, 'msg': """
                 Relative tolerance for element count convergence (default {:.4e})
+                """},
+            'qoi_rtol': {'type': float, 'msg': """
+                Relative tolerance for quantity of interest convergence (default {:.4e})
                 """},
             'norm_order': {'type': float, 'msg': """
                 Order p used in L-p space-time normalisation (default {:}). Choose a value
@@ -50,6 +60,10 @@ class Parser(object):
                 """},
             'load_metric': {'type': bool, 'msg': """
                 Toggle loading metric data from file (default {:b}).
+                """},
+            'adjoint_projection': {'type': bool, 'msg': """
+                Toggle whether to project adjoint solutions using conservative
+                interpolation operator or its adjoint (default {:b}).
                 """},
         }
         self._added = {}
