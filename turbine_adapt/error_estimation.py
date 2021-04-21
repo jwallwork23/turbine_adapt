@@ -5,30 +5,38 @@ __all__ = ["ErrorEstimator"]
 
 
 class ErrorEstimator(object):
-    # TODO: doc
-    def __init__(self, options, norm_type='L2'):
+    """
+    Error estimation for shallow water tidal
+    turbine modelling applications.
+    """
+    def __init__(self, options, mesh=None, norm_type='L2'):
         """
         :args options: :class:`FarmOptions` parameter object.
         """
         self.options = options
-        self.mesh = options.mesh2d
+        self.mesh = mesh or options.mesh2d
         self.P0 = FunctionSpace(self.mesh, "DG", 0)
         self.p0test = TestFunction(self.P0)
         self.p0trial = TrialFunction(self.P0)
         self.h = CellSize(self.mesh)
         self.n = FacetNormal(self.mesh)
+
+        # Discretisation parameters
         assert self.options.timestepper_type in ('CrankNicolson', 'SteadyState')
         self.steady = self.options.timestepper_type == 'SteadyState'
         self.theta = None if self.steady else self.options.timestepper_options.implicitness_theta
         self.eta_is_dg = self.options.element_family == 'dg-dg'
-        assert norm_type in ('L1', 'L2')
-        self.norm_type = norm_type
 
+        # Get turbine drag coefficient
         self.drag_coefficient = self.options.quadratic_drag_coefficient
         Ct = self.options.corrected_thrust_coefficient*Constant(pi/8)
         for i, subdomain_id in enumerate(options.farm_ids):
             indicator = interpolate(Constant(1.0), self.P0, subset=self.mesh.cell_subset(subdomain_id))
             self.drag_coefficient = self.drag_coefficient + Ct*indicator
+
+        # Error estimation parameters
+        assert norm_type in ('L1', 'L2')
+        self.norm_type = norm_type
 
     def _Psi_u_steady(self, uv, elev):
         H = self.options.bathymetry2d + elev
@@ -213,46 +221,71 @@ class ErrorEstimator(object):
         return self.theta*f + (1-self.theta)*f_old
 
     def strong_residuals(self, uv, elev, uv_old, elev_old):
-        # TODO: doc
+        """
+        Compute the strong residual over a single
+        timestep, given current solution tuple
+        `(uv, elev)` and lagged solution tuple
+        `(uv_old, elev_old)`.
+
+        If :attr:`timestepper` is set to
+        `'SteadyState'` then only the `uv` and
+        `elev` arguments are used.
+        """
         if self.steady:
-            Psi_u = self._Psi_u_steady(uv, elev)
-            Psi_v = self._Psi_v_steady(uv, elev)
-            Psi_eta = self._Psi_eta_steady(uv, elev)
+            args = (uv, elev)
+            Psi_u = self._Psi_u_steady(*args)
+            Psi_v = self._Psi_v_steady(*args)
+            Psi_eta = self._Psi_eta_steady(*args)
         else:
-            Psi_u = self._Psi_u_unsteady(uv, elev, uv_old, elev_old)
-            Psi_v = self._Psi_v_unsteady(uv, elev, uv_old, elev_old)
-            Psi_eta = self._Psi_eta_unsteady(uv, elev, uv_old, elev_old)
+            args = (uv, elev, uv_old, elev_old)
+            Psi_u = self._Psi_u_unsteady(*args)
+            Psi_v = self._Psi_v_unsteady(*args)
+            Psi_eta = self._Psi_eta_unsteady(*args)
         if self.norm_type == 'L1':
             return [
                 assemble(self.p0test*abs(Psi_u)*dx),
                 assemble(self.p0test*abs(Psi_v)*dx),
-                assemble(self.p0test*abs(Psi_eta)*dx)
+                assemble(self.p0test*abs(Psi_eta)*dx),
             ]
         else:
             return [
                 sqrt(assemble(self.p0test*Psi_u*Psi_u*dx)),
                 sqrt(assemble(self.p0test*Psi_v*Psi_v*dx)),
-                sqrt(assemble(self.p0test*Psi_eta*Psi_eta*dx))
+                sqrt(assemble(self.p0test*Psi_eta*Psi_eta*dx)),
             ]
 
     def flux_terms(self, uv, elev, uv_old, elev_old):
-        # TODO: doc
+        """
+        Compute flux jump terms over a single
+        timestep, given current solution tuple
+        `(uv, elev)` and lagged solution tuple
+        `(uv_old, elev_old)`.
+
+        If :attr:`timestepper` is set to
+        `'SteadyState'` then only the `uv` and
+        `elev` arguments are used.
+        """
         # TODO: Account for boundary conditions
         if self.steady:
+            args = (uv, elev)
             return [
-                self._psi_u_steady(uv, elev),
-                self._psi_v_steady(uv, elev),
-                self._psi_eta_steady(uv, elev)
+                self._psi_u_steady(*args),
+                self._psi_v_steady(*args),
+                self._psi_eta_steady(*args),
             ]
         else:
+            args = (uv, elev, uv_old, elev_old)
             return [
-                self._psi_u_unsteady(uv, elev, uv_old, elev_old),
-                self._psi_v_unsteady(uv, elev, uv_old, elev_old),
-                self._psi_eta_unsteady(uv, elev, uv_old, elev_old)
+                self._psi_u_unsteady(*args),
+                self._psi_v_unsteady(*args),
+                self._psi_eta_unsteady(*args),
             ]
 
     def recover_laplacians(self, uv, elev):
-        # TODO: doc
+        """
+        Recover the Laplacian of solution
+        tuple `(uv, elev)`.
+        """
         P1_vec = VectorFunctionSpace(self.mesh, "CG", 1)
         g, phi = TrialFunction(P1_vec), TestFunction(P1_vec)
         a = inner(phi, g)*dx
@@ -271,16 +304,20 @@ class ErrorEstimator(object):
         else:
             return [sqrt(interpolate(inner(div(proj), div(proj)), self.P0)) for proj in projections]
 
-    def difference_quotient(self, uv, elev, uv_old, elev_old, uv_adj, elev_adj, uv_adj_old, elev_adj_old):
-        # TODO: doc
+    def difference_quotient(self, uv, elev, uv_old, elev_old, uv_adj, elev_adj, uv_adj_next, elev_adj_next):
+        """
+        Evaluate the dual weighted residual
+        error estimator in difference quotient
+        formulation.
+        """
         Psi = self.strong_residuals(uv, elev, uv_old, elev_old)
         psi = self.flux_terms(uv, elev, uv_old, elev_old)
         R = self.recover_laplacians(uv_adj, elev_adj)
         if not self.steady:
-            for R_i, R_old_i in zip(R, self.recover_laplacians(uv_adj_old, elev_adj_old)):
+            for R_i, R_old_i in zip(R, self.recover_laplacians(uv_adj_next, elev_adj_next)):
                 R_i += R_old_i
                 R_i *= 0.5
-        dq = Function(self.P0)
+        dq = Function(self.P0, name="Difference quotient")
         for Psi_i, psi_i, R_i in zip(Psi, psi, R):
             dq.project(dq + (Psi_i + psi_i/sqrt(self.h))*R_i)
         dq.interpolate(abs(dq))  # Ensure positivity
