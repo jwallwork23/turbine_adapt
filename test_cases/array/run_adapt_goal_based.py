@@ -9,8 +9,8 @@ parser = Parser(prog='turbine/array/run_goal_based.py')
 parser.add_argument('-level', 0, help="""
     Mesh resolution level inside the refined region.
     Choose a value from [0, 1, 2, 3, 4] (default 0).""")
-parser.add_argument('-num_tidal_cycles', 0.25)  # TODO: 1
-parser.add_argument('-num_meshes', 10)  # TODO: 80
+parser.add_argument('-num_tidal_cycles', 1.0)
+parser.add_argument('-num_meshes', 80)
 parser.add_argument('-maxiter', 5)
 parser.add_argument('-element_rtol', 0.005)
 parser.add_argument('-qoi_rtol', 0.005)
@@ -219,7 +219,6 @@ for fp_iteration in range(parsed_args.maxiter+1):
 
     # Plot difference quotient
     outfiles['error'] = File(os.path.join(output_dir, 'Indicator2d.pvd'))
-    difference_quotients = list(reversed(difference_quotients))
     for dq in difference_quotients:
         outfiles['error']._topology = None
         outfiles['error'].write(dq)
@@ -234,7 +233,7 @@ for fp_iteration in range(parsed_args.maxiter+1):
 
     # Plot metrics
     outfiles['metric'] = File(os.path.join(output_dir, 'Metric2d.pvd'))
-    for metric in reversed(metrics):
+    for metric in metrics:
         metric.rename("Metric")
         outfiles['metric']._topology = None
         outfiles['metric'].write(metric)
@@ -246,7 +245,7 @@ for fp_iteration in range(parsed_args.maxiter+1):
 
     # Plot meshes
     outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
-    for mesh in reversed(meshes):
+    for mesh in meshes:
         outfiles['mesh']._topology = None
         outfiles['mesh'].write(mesh.coordinates)
 
