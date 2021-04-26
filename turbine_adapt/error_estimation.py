@@ -220,7 +220,7 @@ class ErrorEstimator(object):
         f_old = self._psi_eta_steady(uv_old, elev_old)
         return self.theta*f + (1-self.theta)*f_old
 
-    def strong_residuals(self, uv, elev, uv_old, elev_old):
+    def strong_residuals(self, *args):
         """
         Compute the strong residual over a single
         timestep, given current solution tuple
@@ -228,16 +228,14 @@ class ErrorEstimator(object):
         `(uv_old, elev_old)`.
 
         If :attr:`timestepper` is set to
-        `'SteadyState'` then only the `uv` and
+        `'SteadyState'` then only two `uv` and
         `elev` arguments are used.
         """
         if self.steady:
-            args = (uv, elev)
             Psi_u = self._Psi_u_steady(*args)
             Psi_v = self._Psi_v_steady(*args)
             Psi_eta = self._Psi_eta_steady(*args)
         else:
-            args = (uv, elev, uv_old, elev_old)
             Psi_u = self._Psi_u_unsteady(*args)
             Psi_v = self._Psi_v_unsteady(*args)
             Psi_eta = self._Psi_eta_unsteady(*args)
@@ -249,12 +247,12 @@ class ErrorEstimator(object):
             ]
         else:
             return [
-                sqrt(assemble(self.p0test*Psi_u*Psi_u*dx)),
-                sqrt(assemble(self.p0test*Psi_v*Psi_v*dx)),
-                sqrt(assemble(self.p0test*Psi_eta*Psi_eta*dx)),
+                sqrt(abs(assemble(self.p0test*Psi_u*Psi_u*dx))),
+                sqrt(abs(assemble(self.p0test*Psi_v*Psi_v*dx))),
+                sqrt(abs(assemble(self.p0test*Psi_eta*Psi_eta*dx))),
             ]
 
-    def flux_terms(self, uv, elev, uv_old, elev_old):
+    def flux_terms(self, *args):
         """
         Compute flux jump terms over a single
         timestep, given current solution tuple
@@ -267,14 +265,12 @@ class ErrorEstimator(object):
         """
         # TODO: Account for boundary conditions
         if self.steady:
-            args = (uv, elev)
             return [
                 self._psi_u_steady(*args),
                 self._psi_v_steady(*args),
                 self._psi_eta_steady(*args),
             ]
         else:
-            args = (uv, elev, uv_old, elev_old)
             return [
                 self._psi_u_unsteady(*args),
                 self._psi_v_unsteady(*args),
@@ -304,19 +300,30 @@ class ErrorEstimator(object):
         else:
             return [sqrt(interpolate(inner(div(proj), div(proj)), self.P0)) for proj in projections]
 
-    def difference_quotient(self, uv, elev, uv_old, elev_old, uv_adj, elev_adj, uv_adj_next, elev_adj_next):
+    def difference_quotient(self, *args, flux_form=False):
         """
         Evaluate the dual weighted residual
         error estimator in difference quotient
         formulation.
         """
-        Psi = self.strong_residuals(uv, elev, uv_old, elev_old)
-        psi = self.flux_terms(uv, elev, uv_old, elev_old)
-        R = self.recover_laplacians(uv_adj, elev_adj)
-        if not self.steady:
-            for R_i, R_old_i in zip(R, self.recover_laplacians(uv_adj_next, elev_adj_next)):
-                R_i += R_old_i
-                R_i *= 0.5
+        nargs = len(args)
+        assert nargs == 4 if self.steady else 8
+
+        # Terms for standard a posteriori error estimate
+        Psi = self.strong_residuals(*args[:nargs//2])
+        psi = self.flux_terms(*args[:nargs//2])
+
+        # Weighting term for the adjoint
+        if flux_form:
+            R = self.flux_terms(*args[nargs//2:])
+        else:
+            R = self.recover_laplacians(*args[nargs//2:2+nargs//2])
+            if not self.steady:  # Average recovered Laplacians
+                for R_i, R_old_i in zip(R, self.recover_laplacians(*args[-2:])):
+                    R_i += R_old_i
+                    R_i *= 0.5
+
+        # Combine the two
         dq = Function(self.P0, name="Difference quotient")
         for Psi_i, psi_i, R_i in zip(Psi, psi, R):
             dq.project(dq + (Psi_i + psi_i/sqrt(self.h))*R_i)

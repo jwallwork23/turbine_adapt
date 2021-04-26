@@ -20,6 +20,7 @@ parser.add_argument('-h_min', 0.1)
 parser.add_argument('-h_max', 1000.0)
 # parser.add_argument('-adjoint_projection', True)  # FIXME
 parser.add_argument('-adjoint_projection', False)
+parser.add_argument('-flux_form', False)
 parsed_args = parser.parse_args()
 num_meshes = parsed_args.num_meshes
 
@@ -144,7 +145,7 @@ for fp_iteration in range(parsed_args.maxiter+1):
     args = (solver, initial_condition, time_integrated_qoi, spaces, end_time, dt)
     if converged:
         J, checkpoints = get_checkpoints(
-            *args, timesteps_per_export=dt_per_export, no_exports=False,
+            *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
         )
     else:
         J, solutions = solve_adjoint(
@@ -159,7 +160,7 @@ for fp_iteration in range(parsed_args.maxiter+1):
             converged = True
             converged_reason = 'converged quantity of interest'
             J, checkpoints = get_checkpoints(
-                *args, timesteps_per_export=dt_per_export, no_exports=False,
+                *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
             )
     J_old = J
 
@@ -208,7 +209,7 @@ for fp_iteration in range(parsed_args.maxiter+1):
                 outfiles[f].write(*args[-2:])
 
             # Evaluate error indicator
-            _dq = ee.difference_quotient(*args)
+            _dq = ee.difference_quotient(*args, flux_form=parsed_args.flux_form)
 
             # Apply trapezium rule
             if j in (0, N-1):

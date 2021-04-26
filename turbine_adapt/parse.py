@@ -65,6 +65,10 @@ class Parser(object):
                 Toggle whether to project adjoint solutions using conservative
                 interpolation operator or its adjoint (default {:b}).
                 """},
+            'flux_form': {'type': bool, 'msg': """
+                Toggle whether to use the flux form of the difference quotient
+                error indicator (default {:b}).
+                """},
         }
         self._added = {}
 
