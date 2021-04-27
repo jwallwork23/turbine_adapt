@@ -138,18 +138,21 @@ class ArrayOptions(FarmOptions):
             nu.interpolate(conditional(Re_h > self.max_mesh_reynolds_number, nu_enforced, nu))
         return nu
 
-    def apply_boundary_conditions(self, solver_obj):
-        if len(solver_obj.function_spaces.keys()) == 0:
-            solver_obj.create_function_spaces()
-        V_2d = solver_obj.function_spaces.V_2d
+    def get_bnd_conditions(self, V_2d):
         self.elev_in = Function(V_2d.sub(1))
         self.elev_out = Function(V_2d.sub(1))
         inflow_tag = 4
         outflow_tag = 2
-        solver_obj.bnd_functions['shallow_water'] = {
+        self.bnd_conditions = {
             inflow_tag: {'elev': self.elev_in},
             outflow_tag: {'elev': self.elev_out},
         }
+
+    def apply_boundary_conditions(self, solver_obj):
+        if len(solver_obj.function_spaces.keys()) == 0:
+            solver_obj.create_function_spaces()
+        self.get_bnd_conditions(solver_obj.function_spaces.V_2d)
+        solver_obj.bnd_functions['shallow_water'] = self.bnd_conditions
 
     def apply_initial_conditions(self, solver_obj):
         """

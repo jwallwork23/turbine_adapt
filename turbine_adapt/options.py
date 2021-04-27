@@ -37,6 +37,9 @@ class FarmOptions(ModelOptions2d):
     def export_func(self):
         return self.get_export_func()
 
+    def get_bnd_conditions(self, V_2d):
+        self.bnd_conditions = {}
+
     def apply_boundary_conditions(self, solver_obj):
         """
         Should be implemented in derived class.
