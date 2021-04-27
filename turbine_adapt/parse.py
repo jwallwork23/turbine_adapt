@@ -80,6 +80,8 @@ class Parser(object):
             kwargs = dict(help=self._help[tag]['msg'].format(default))
         else:
             kwargs = {}
+        if tag not in self._help:
+            self._help[tag] = dict(type=type(default))
         self._parser.add_argument(label, **kwargs)
         self._added[tag] = default
 
