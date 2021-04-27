@@ -1,5 +1,4 @@
 from turbine_adapt import *
-import itertools
 from options import ArrayOptions
 
 

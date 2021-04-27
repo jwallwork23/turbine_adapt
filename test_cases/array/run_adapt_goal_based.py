@@ -1,5 +1,6 @@
 from turbine_adapt import *
 from turbine_adapt.error_estimation import ErrorEstimator
+from pyadjoint import stop_annotating
 import itertools
 from options import ArrayOptions
 
@@ -17,10 +18,11 @@ parser.add_argument('-qoi_rtol', 0.005)
 parser.add_argument('-norm_order', 1.0)
 parser.add_argument('-target', 5000.0)
 parser.add_argument('-h_min', 0.1)
-parser.add_argument('-h_max', 1000.0)
+parser.add_argument('-h_max', 50.0)
 # parser.add_argument('-adjoint_projection', True)  # FIXME
 parser.add_argument('-adjoint_projection', False)
 parser.add_argument('-flux_form', False)
+parser.add_argument('-space_only', False)
 parsed_args = parser.parse_args()
 num_meshes = parsed_args.num_meshes
 
@@ -84,7 +86,7 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
     _Ct = Constant(Ct)
     for i, subdomain_id in enumerate(options.farm_ids):
         subset = mesh.cell_subset(subdomain_id)
-        _Ct = _Ct + ct*interpolate(Constant(1.0), P0, subset=subset)
+        _Ct = _Ct + interpolate(ct, P0, subset=subset)
 
     def update_forcings(t):
         options.update_forcings(t)
@@ -96,14 +98,17 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
     return solver_obj.fields.solution_2d, options.J
 
 
-def time_integrated_qoi(sol, t, turbine_drag=Ct):
+def time_integrated_qoi(sol, t, turbine_drag=None):
     """
     Power output of the array at time `t`.
 
     Integration in time gives the energy output.
     """
+    assert turbine_drag is not None, \
+        "Turbine drag needs to be provided."
     u, eta = sol.split()
-    return turbine_drag*pow(dot(u, u), 1.5)*dx
+    unorm = sqrt(dot(u, u))
+    return turbine_drag*pow(unorm, 3)*dx
 
 
 def initial_condition(fs):
@@ -144,10 +149,13 @@ for fp_iteration in range(parsed_args.maxiter+1):
     # Solve forward and adjoint on each subinterval
     args = (solver, initial_condition, time_integrated_qoi, spaces, end_time, dt)
     if converged:
-        J, checkpoints = get_checkpoints(
-            *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
-        )
+        with stop_annotating():
+            print_output("\n--- Final forward run\n")
+            J, checkpoints = get_checkpoints(
+                *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
+            )
     else:
+        print_output(f"\n--- Forward-adjoint sweep {fp_iteration+1}\n")
         J, solutions = solve_adjoint(
             *args, timesteps_per_export=dt_per_export,
             solves_per_timestep=solves_per_dt,
@@ -159,9 +167,11 @@ for fp_iteration in range(parsed_args.maxiter+1):
         if abs(J - J_old) < parsed_args.qoi_rtol*J_old:
             converged = True
             converged_reason = 'converged quantity of interest'
-            J, checkpoints = get_checkpoints(
-                *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
-            )
+            with stop_annotating():
+                print_output("\n--- Final forward run\n")
+                J, checkpoints = get_checkpoints(
+                    *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
+                )
     J_old = J
 
     # Escape if converged
@@ -181,84 +191,97 @@ for fp_iteration in range(parsed_args.maxiter+1):
 
     # Loop over all meshes to evaluate error indicators
     difference_quotients = []
-    for i, mesh in enumerate(meshes):
-        for f in fields:
-            outfiles[f]._topology = None  # Allow writing a different mesh
-
-        # Update FarmOptions object according to mesh
-        options.create_tidal_farm(mesh=mesh)
-        P1 = get_functionspace(mesh, "CG", 1)
-        options.horizontal_viscosity = options.set_viscosity(P1)
-
-        # Create error estimator
-        ee = ErrorEstimator(options, mesh=mesh)
-        dq = Function(ee.P0, name="Difference quotient")
-
-        # Loop over all exported timesteps
-        N = len(solutions['adjoint'][i])
-        for j in range(N):
-            if i < num_meshes-1 and j == N-1:
-                continue
-
-            # Plot fields
-            args = []
+    with stop_annotating():
+        print_output(f"\n--- Error estimation {fp_iteration+1}\n")
+        for i, mesh in enumerate(meshes):
             for f in fields:
-                args.extend(solutions[f][i][j].split())
-                args[-2].rename("Adjoint velocity" if 'adjoint' in f else "Velocity")
-                args[-1].rename("Adjoint elevation" if 'adjoint' in f else "Elevation")
-                outfiles[f].write(*args[-2:])
+                outfiles[f]._topology = None  # Allow writing a different mesh
+            options.get_bnd_conditions(spaces[i])
+            update_forcings = options.update_forcings
 
-            # Evaluate error indicator
-            _dq = ee.difference_quotient(*args, flux_form=parsed_args.flux_form)
+            # Update FarmOptions object according to mesh
+            options.create_tidal_farm(mesh=mesh)
+            P1 = get_functionspace(mesh, "CG", 1)
+            options.horizontal_viscosity = options.set_viscosity(P1)
 
-            # Apply trapezium rule
-            if j in (0, N-1):
-                _dq *= 0.5
-            _dq *= dt
-            dq += _dq
-        difference_quotients.append(dq)
+            # Create error estimator
+            ee = ErrorEstimator(options, mesh=mesh)
+            dq = Function(ee.P0, name="Difference quotient")
 
-    # Plot difference quotient
-    outfiles['error'] = File(os.path.join(output_dir, 'Indicator2d.pvd'))
-    for dq in difference_quotients:
-        outfiles['error']._topology = None
-        outfiles['error'].write(dq)
+            # Loop over all exported timesteps
+            N = len(solutions['adjoint'][i])
+            for j in range(N):
+                if i < num_meshes-1 and j == N-1:
+                    continue
 
-    # Construct isotropic metrics
-    metrics = [
-        isotropic_metric(dq)
-        for dq in difference_quotients
-    ]
-    metrics = space_time_normalise(metrics, end_time, timesteps, target, parsed_args.norm_order)
-    metrics = enforce_element_constraints(metrics, parsed_args.h_min, parsed_args.h_max)
+                # Plot fields
+                args = []
+                for f in fields:
+                    args.extend(solutions[f][i][j].split())
+                    args[-2].rename("Adjoint velocity" if 'adjoint' in f else "Velocity")
+                    args[-1].rename("Adjoint elevation" if 'adjoint' in f else "Elevation")
+                    outfiles[f].write(*args[-2:])
 
-    # Plot metrics
-    outfiles['metric'] = File(os.path.join(output_dir, 'Metric2d.pvd'))
-    for metric in metrics:
-        metric.rename("Metric")
-        outfiles['metric']._topology = None
-        outfiles['metric'].write(metric)
+                # Evaluate error indicator
+                update_forcings(i*end_time/num_meshes + dt*(j + 1))
+                _dq = ee.difference_quotient(*args, flux_form=parsed_args.flux_form)
 
-    # Adapt meshes
-    for i, metric in enumerate(metrics):
-        meshes[i] = Mesh(adapt(meshes[i], metric).coordinates)
-    num_cells = [mesh.num_cells() for mesh in meshes]
+                # Apply trapezium rule
+                if j in (0, N-1):
+                    _dq *= 0.5
+                _dq *= dt
+                dq += _dq
+            difference_quotients.append(dq)
 
-    # Plot meshes
-    outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
-    for mesh in meshes:
-        outfiles['mesh']._topology = None
-        outfiles['mesh'].write(mesh.coordinates)
+        # Plot difference quotient
+        outfiles['error'] = File(os.path.join(output_dir, 'Indicator2d.pvd'))
+        for dq in difference_quotients:
+            outfiles['error']._topology = None
+            outfiles['error'].write(dq)
 
-    # Check for convergence of element count
-    elements_converged = False
-    if num_cells_old is not None:
-        elements_converged = True
-        for nc, _nc in zip(num_cells, num_cells_old):
-            if abs(nc - _nc) > parsed_args.element_rtol*_nc:
-                elements_converged = False
-    num_cells_old = num_cells
-    if elements_converged:
-        print_output(f"Mesh element count converged to rtol {parsed_args.element_rtol}")
-        converged = True
-        converged_reason = 'converged element counts'
+        # Construct isotropic metrics
+        metrics = [
+            isotropic_metric(dq)
+            for dq in difference_quotients
+        ]
+        if parsed_args.space_only:
+            for metric in metrics:
+                space_normalise(metric, target, parsed_args.norm_order)
+        else:
+            metrics = space_time_normalise(
+                metrics, end_time, timesteps, target, parsed_args.norm_order
+            )
+        metrics = enforce_element_constraints(
+            metrics, parsed_args.h_min, parsed_args.h_max
+        )
+
+        # Plot metrics
+        outfiles['metric'] = File(os.path.join(output_dir, 'Metric2d.pvd'))
+        for metric in metrics:
+            metric.rename("Metric")
+            outfiles['metric']._topology = None
+            outfiles['metric'].write(metric)
+
+        # Adapt meshes
+        for i, metric in enumerate(metrics):
+            meshes[i] = Mesh(adapt(meshes[i], metric).coordinates)
+        num_cells = [mesh.num_cells() for mesh in meshes]
+
+        # Plot meshes
+        outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
+        for mesh in meshes:
+            outfiles['mesh']._topology = None
+            outfiles['mesh'].write(mesh.coordinates)
+
+        # Check for convergence of element count
+        elements_converged = False
+        if num_cells_old is not None:
+            elements_converged = True
+            for nc, _nc in zip(num_cells, num_cells_old):
+                if abs(nc - _nc) > parsed_args.element_rtol*_nc:
+                    elements_converged = False
+        num_cells_old = num_cells
+        if elements_converged:
+            print_output(f"Mesh element count converged to rtol {parsed_args.element_rtol}")
+            converged = True
+            converged_reason = 'converged element counts'
