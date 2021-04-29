@@ -28,7 +28,7 @@ parsed_args = parser.parse_args()
 num_meshes = parsed_args.num_meshes
 
 # Mesh independent setup
-options = ArrayOptions(level=0)
+options = ArrayOptions(ramp_dir=os.path.join('outputs', 'fixed_mesh', f'level{parsed_args.level}'))
 end_time = parsed_args.num_tidal_cycles*options.tide_time
 output_dir = os.path.join(options.output_directory, 'dwr', f'target{parsed_args.target:.0f}')
 options.output_directory = create_directory(output_dir)
@@ -122,10 +122,17 @@ def initial_condition(fs):
     """
     q = Function(fs)
     u, eta = q.split()
-    u.interpolate(as_vector([1e-8, 0.0]))
-    x, y = SpatialCoordinate(fs.mesh())
-    X = 2*x/options.domain_length  # Non-dimensionalised x
-    eta.interpolate(-options.max_amplitude*X)
+    if options.ramp is not None:
+        print_output("Initialising with ramped hydrodynamics")
+        u_ramp, eta_ramp = options.ramp.split()
+        u.project(u_ramp)
+        eta.project(eta_ramp)
+    else:
+        print_output("Initialising with unramped hydrodynamics")
+        u.interpolate(as_vector([1e-8, 0.0]))
+        x, y = SpatialCoordinate(fs.mesh())
+        X = 2*x/options.domain_length  # Non-dimensionalised x
+        eta.interpolate(-options.max_amplitude*X)
     return q
 
 
