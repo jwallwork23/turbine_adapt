@@ -12,13 +12,14 @@ parser.add_argument('-level', 0, help="""
     Choose a value from [0, 1, 2, 3, 4] (default 0).""")
 parser.add_argument('-num_tidal_cycles', 1.0)
 parser.add_argument('-num_meshes', 80)
+parser.add_argument('-miniter', 3)
 parser.add_argument('-maxiter', 5)
 parser.add_argument('-element_rtol', 0.005)
 parser.add_argument('-qoi_rtol', 0.005)
 parser.add_argument('-norm_order', 1.0)
 parser.add_argument('-target', 5000.0)
-parser.add_argument('-h_min', 0.1)
-parser.add_argument('-h_max', 50.0)
+parser.add_argument('-h_min', 0.01)
+parser.add_argument('-h_max', 100.0)
 # parser.add_argument('-adjoint_projection', True)  # FIXME
 parser.add_argument('-adjoint_projection', False)
 parser.add_argument('-flux_form', False)
@@ -34,7 +35,9 @@ options.output_directory = create_directory(output_dir)
 Ct = options.quadratic_drag_coefficient
 ct = options.corrected_thrust_coefficient*Constant(pi/8)
 dt = options.timestep
-target = parsed_args.target*end_time/dt  # space-time complexity
+target = parsed_args.target
+if not parsed_args.space_only:
+    target *= end_time/dt  # space-time complexity
 timesteps = [dt]*num_meshes
 dt_per_export = int(options.simulation_export_time/dt)
 solves_per_dt = 1
@@ -132,7 +135,9 @@ converged_reason = None
 num_cells_old = None
 J_old = None
 for fp_iteration in range(parsed_args.maxiter+1):
-    if fp_iteration == parsed_args.maxiter:
+    if fp_iteration < parsed_args.miniter:
+        converged = False
+    elif fp_iteration == parsed_args.maxiter:
         converged = True
         if converged_reason is None:
             converged_reason = 'maximum number of iterations reached'
@@ -164,7 +169,7 @@ for fp_iteration in range(parsed_args.maxiter+1):
 
     # Check for QoI convergence
     if J_old is not None:
-        if abs(J - J_old) < parsed_args.qoi_rtol*J_old:
+        if abs(J - J_old) < parsed_args.qoi_rtol*J_old and fp_iteration < parsed_args.miniter:
             converged = True
             converged_reason = 'converged quantity of interest'
             with stop_annotating():
@@ -196,13 +201,9 @@ for fp_iteration in range(parsed_args.maxiter+1):
         for i, mesh in enumerate(meshes):
             for f in fields:
                 outfiles[f]._topology = None  # Allow writing a different mesh
+            options.rebuild_mesh_dependent_components(mesh)
             options.get_bnd_conditions(spaces[i])
             update_forcings = options.update_forcings
-
-            # Update FarmOptions object according to mesh
-            options.create_tidal_farm(mesh=mesh)
-            P1 = get_functionspace(mesh, "CG", 1)
-            options.horizontal_viscosity = options.set_viscosity(P1)
 
             # Create error estimator
             ee = ErrorEstimator(options, mesh=mesh)
@@ -263,15 +264,12 @@ for fp_iteration in range(parsed_args.maxiter+1):
             outfiles['metric'].write(metric)
 
         # Adapt meshes
+        outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
         for i, metric in enumerate(metrics):
             meshes[i] = Mesh(adapt(meshes[i], metric).coordinates)
-        num_cells = [mesh.num_cells() for mesh in meshes]
-
-        # Plot meshes
-        outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
-        for mesh in meshes:
             outfiles['mesh']._topology = None
-            outfiles['mesh'].write(mesh.coordinates)
+            outfiles['mesh'].write(meshes[i].coordinates)
+        num_cells = [mesh.num_cells() for mesh in meshes]
 
         # Check for convergence of element count
         elements_converged = False

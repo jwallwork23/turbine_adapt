@@ -25,6 +25,9 @@ class Parser(object):
             'num_meshes': {'type': int, 'msg': """
                 Number of meshes in the fixed point iteration loop (default {:d}).
                 """},
+            'miniter': {'type': int, 'msg': """
+                Minimum number of fixed point iterations (default {:d}).
+                """},
             'maxiter': {'type': int, 'msg': """
                 Maximum number of fixed point iterations (default {:d}). If set to zero,
                 mesh adaptation is not applied.
