@@ -67,7 +67,7 @@ class FarmOptions(ModelOptions2d):
         H = self.depth
         swept_area = pi*(D/2)**2
         cross_sectional_area = H*D
-        correction = 4.0/(1.0 + np.sqrt(1.0 - c_T*swept_area/cross_sectional_area))
+        correction = 4.0/(1.0 + np.sqrt(1.0 - c_T*swept_area/cross_sectional_area))**2
         return c_T*correction
 
     def create_tidal_farm(self, mesh=None):

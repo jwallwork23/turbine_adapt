@@ -19,8 +19,8 @@ options.output_directory = create_directory(output_dir)
 # Solve
 solver_obj = FarmSolver(options)
 options.apply_boundary_conditions(solver_obj)
-for Callback in (PowerOutputCallback, PeakVorticityCallback):
-    solver_obj.add_callback(Callback(solver_obj), 'timestep')
+# for Callback in (PowerOutputCallback, PeakVorticityCallback):
+#     solver_obj.add_callback(Callback(solver_obj), 'timestep')
 options.apply_initial_conditions(solver_obj)
 solver_obj.iterate(update_forcings=options.update_forcings, export_func=options.export_func)
 
