@@ -8,15 +8,42 @@ __all__ = ["FarmOptions"]
 
 class FarmOptions(ModelOptions2d):
     """
-    Base class for parameters associated with tidal farm problems.
+    Base class for parameters associated with
+    tidal farm problems.
     """
-    sea_water_density = PositiveFloat(1030.0).tag(config=True)
-    M2_tide_period = PositiveFloat(12.4*3600).tag(config=False)
-    thrust_coefficient = PositiveFloat(0.8).tag(config=True)
-    correct_thrust = Bool(True).tag(config=True)
-    max_mesh_reynolds_number = PositiveFloat(1000.0).tag(config=True)
-    target_mesh_reynolds_number = PositiveFloat(None, allow_none=True).tag(config=True)
-    break_even_wattage = NonNegativeFloat(0.0).tag(config=True)
+    sea_water_density = PositiveFloat(1030.0, help="""
+        Density of sea water in kg m^{-3}.
+
+        This is used when computing power and
+        energy output.
+        """).tag(config=True)
+    M2_tide_period = PositiveFloat(12.4*3600, help="""
+        Period of the M2 tidal constituent in
+        seconds.
+        """).tag(config=False)
+    thrust_coefficient = PositiveFloat(0.8, help="""
+        Uncorrected dimensionless drag associated
+        with a turbine.
+        """).tag(config=True)
+    correct_thrust = Bool(True, help="""
+        Toggle whether to apply the thrust correction
+        recommended in [Kramer and Piggott 2016].
+        """).tag(config=True)
+    max_mesh_reynolds_number = PositiveFloat(1000.0, help="""
+        Maximum tolerated mesh Reynolds number.
+        """).tag(config=True)
+    target_mesh_reynolds_number = PositiveFloat(None, help="""
+        Target mesh Reynolds number.
+        """, allow_none=True).tag(config=True)
+    break_even_wattage = NonNegativeFloat(0.0, help="""
+        Minimum Wattage to be reached before activating a
+        turbine.
+        """).tag(config=True)
+    discrete_turbines = Bool(True, help="""
+        Toggle whether to consider turbines as indicator
+        functions over their footprints (discrete) or as
+        a density field (continuous).
+        """).tag(config=True)
 
     def __init__(self, **kwargs):
         super(FarmOptions, self).__init__()
@@ -84,7 +111,24 @@ class FarmOptions(ModelOptions2d):
         W = self.turbine_diameter if not hasattr(self, 'turbine_width') else self.turbine_width
         footprint_area = D*W
         farm_options = TidalTurbineFarmOptions()
-        farm_options.turbine_density = Constant(1.0/footprint_area, domain=self.mesh2d)
+        if self.discrete_turbines:
+            farm_options.turbine_density = Constant(1.0/footprint_area, domain=self.mesh2d)
+        else:
+            # NOTE: Assumes turbines aligned with xy-axes with
+            #       D and W corresponding to x and y axes, resp.
+            x, y = SpatialCoordinate(self.mesh2d)
+            farm_options.turbine_density = 0
+            for tag in self.farm_ids:
+                area = assemble(Constant(1.0, domain=self.mesh2d)*dx(tag))
+                _x, _y = assemble(x*dx(tag))/area, assemble(y*dx(tag))/area
+                q0, q1 = (x - _x)**2/D**2, (y - _y)**2/W**2
+                bump = conditional(
+                    And(lt(q0, 1), lt(q1, 1)),
+                    exp(1 - 1/(1 - q0))*exp(1 - 1/(1 - q1)),
+                    0
+                )
+                area = assemble(bump*dx)
+                farm_options.turbine_density = farm_options.turbine_density + bump/area
         farm_options.turbine_options.diameter = D
         farm_options.turbine_options.thrust_coefficient = self.corrected_thrust_coefficient
         farm_options.break_even_wattage = self.break_even_wattage
