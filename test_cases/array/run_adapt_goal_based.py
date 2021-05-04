@@ -24,8 +24,12 @@ parser.add_argument('-h_max', 100.0)
 parser.add_argument('-adjoint_projection', False)
 parser.add_argument('-flux_form', False)
 parser.add_argument('-space_only', False)
+parser.add_argument('-approach', 'isotropic_dwr')
 parsed_args = parser.parse_args()
 num_meshes = parsed_args.num_meshes
+if parsed_args.approach not in ('isotropic_dwr', 'anisotropic_dwr'):
+    raise ValueError(f"Adaptation approach {parsed_args.approach} not recognised.")
+approach = parsed_args.approach.split('_')[0]
 
 # Mesh independent setup
 options = ArrayOptions(ramp_dir=os.path.join('outputs', 'fixed_mesh', f'level{parsed_args.level}'))
@@ -83,6 +87,8 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
     solver_obj.iteration = int(np.ceil(solver_obj.next_export_t/options.timestep))
     solver_obj.simulation_time = t_start
     solver_obj.export_initial_state = False
+    if not options.no_exports:
+        solver_obj.exporters['vtk'].set_next_export_ix(i_export)
 
     # Turbine parametrisation
     P0 = FunctionSpace(mesh, "DG", 0)
@@ -137,14 +143,18 @@ def initial_condition(fs):
 
 
 # Enter fixed point iteration
+miniter = parsed_args.miniter
+maxiter = parsed_args.maxiter
+if miniter > maxiter:
+    miniter = maxiter
 converged = False
 converged_reason = None
 num_cells_old = None
 J_old = None
-for fp_iteration in range(parsed_args.maxiter+1):
-    if fp_iteration < parsed_args.miniter:
+for fp_iteration in range(maxiter+1):
+    if fp_iteration < miniter:
         converged = False
-    elif fp_iteration == parsed_args.maxiter:
+    elif fp_iteration == maxiter:
         converged = True
         if converged_reason is None:
             converged_reason = 'maximum number of iterations reached'
@@ -157,101 +167,128 @@ for fp_iteration in range(parsed_args.maxiter+1):
         ])
         for mesh in meshes
     ]
+    metrics = [
+        Function(TensorFunctionSpace(mesh, "CG", 1), name="Metric")
+        for mesh in meshes
+    ]
 
-    # Solve forward and adjoint on each subinterval
-    args = (solver, initial_condition, time_integrated_qoi, spaces, end_time, dt)
-    if converged:
-        with stop_annotating():
-            print_output("\n--- Final forward run\n")
-            J, checkpoints = get_checkpoints(
-                *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
-            )
-    else:
-        print_output(f"\n--- Forward-adjoint sweep {fp_iteration+1}\n")
-        J, solutions = solve_adjoint(
-            *args, timesteps_per_export=dt_per_export,
-            solves_per_timestep=solves_per_dt,
-            adjoint_projection=parsed_args.adjoint_projection,
-        )
+    # Load metric data for first iteration if available
+    loaded = False
+    if fp_iteration == 0:
+        for i, metric in enumerate(metrics):
+            metric_fname = os.path.join(output_dir, f'{approach}_metric{i}.h5')
+            if os.path.exists(metric_fname):
+                print_output(f"\n--- Loading metric data on mesh {i+1}\n")
+                loaded = True
+                with DumbCheckpoint(metric_fname, mode=FILE_READ) as chk:
+                    chk.load(metric, name="Metric")
+            else:
+                assert not loaded, "Only partial metric data available"
+                break
 
-    # Check for QoI convergence
-    if J_old is not None:
-        if abs(J - J_old) < parsed_args.qoi_rtol*J_old and fp_iteration < parsed_args.miniter:
-            converged = True
-            converged_reason = 'converged quantity of interest'
+    # Otherwise, solve forward and adjoint
+    if not loaded:
+
+        # Solve forward and adjoint on each subinterval
+        args = (solver, initial_condition, time_integrated_qoi, spaces, end_time, dt)
+        if converged:
             with stop_annotating():
                 print_output("\n--- Final forward run\n")
                 J, checkpoints = get_checkpoints(
                     *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
                 )
-    J_old = J
+        else:
+            print_output(f"\n--- Forward-adjoint sweep {fp_iteration+1}\n")
+            J, solutions = solve_adjoint(
+                *args, timesteps_per_export=dt_per_export,
+                solves_per_timestep=solves_per_dt,
+                adjoint_projection=parsed_args.adjoint_projection,
+            )
 
-    # Escape if converged
-    if converged:
-        print_output(f"Termination due to {converged_reason} after {fp_iteration+1} iterations")
-        print_output(f"Energy output: {J/3.6e+09} MWh")
-        break
+        # Check for QoI convergence
+        if J_old is not None:
+            if abs(J - J_old) < parsed_args.qoi_rtol*J_old and fp_iteration >= miniter:
+                converged = True
+                converged_reason = 'converged quantity of interest'
+                with stop_annotating():
+                    print_output("\n--- Final forward run\n")
+                    J, checkpoints = get_checkpoints(
+                        *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
+                    )
+        J_old = J
 
-    # Create vtu output files
-    outfiles = {
-        'forward': File(os.path.join(output_dir, 'Forward2d.pvd')),
-        'forward_old': File(os.path.join(output_dir, 'ForwardOld2d.pvd')),
-        'adjoint_next': File(os.path.join(output_dir, 'AdjointNext2d.pvd')),
-        'adjoint': File(os.path.join(output_dir, 'Adjoint2d.pvd')),
-    }
-    fields = ['forward', 'forward_old', 'adjoint_next', 'adjoint']
+        # Escape if converged
+        if converged:
+            print_output(f"Termination due to {converged_reason} after {fp_iteration+1} iterations")
+            print_output(f"Energy output: {J/3.6e+09} MWh")
+            break
 
-    # Loop over all meshes to evaluate error indicators
-    difference_quotients = []
-    with stop_annotating():
-        print_output(f"\n--- Error estimation {fp_iteration+1}\n")
-        for i, mesh in enumerate(meshes):
-            for f in fields:
-                outfiles[f]._topology = None  # Allow writing a different mesh
-            options.rebuild_mesh_dependent_components(mesh)
-            options.get_bnd_conditions(spaces[i])
-            update_forcings = options.update_forcings
+        # Create vtu output files
+        outfiles = {
+            'forward': File(os.path.join(output_dir, 'Forward2d.pvd')),
+            'forward_old': File(os.path.join(output_dir, 'ForwardOld2d.pvd')),
+            'adjoint_next': File(os.path.join(output_dir, 'AdjointNext2d.pvd')),
+            'adjoint': File(os.path.join(output_dir, 'Adjoint2d.pvd')),
+        }
+        fields = ['forward', 'forward_old', 'adjoint_next', 'adjoint']
 
-            # Create error estimator
-            ee = ErrorEstimator(options, mesh=mesh)
-            dq = Function(ee.P0, name="Difference quotient")
-
-            # Loop over all exported timesteps
-            N = len(solutions['adjoint'][i])
-            for j in range(N):
-                if i < num_meshes-1 and j == N-1:
-                    continue
-
-                # Plot fields
-                args = []
+        # Construct metric
+        difference_quotients = []
+        with stop_annotating():
+            print_output(f"\n--- Error estimation {fp_iteration+1}\n")
+            for i, mesh in enumerate(meshes):
                 for f in fields:
-                    args.extend(solutions[f][i][j].split())
-                    args[-2].rename("Adjoint velocity" if 'adjoint' in f else "Velocity")
-                    args[-1].rename("Adjoint elevation" if 'adjoint' in f else "Elevation")
-                    outfiles[f].write(*args[-2:])
+                    outfiles[f]._topology = None  # Allow writing a different mesh
+                options.rebuild_mesh_dependent_components(mesh)
+                options.get_bnd_conditions(spaces[i])
+                update_forcings = options.update_forcings
 
-                # Evaluate error indicator
-                update_forcings(i*end_time/num_meshes + dt*(j + 1))
-                _dq = ee.difference_quotient(*args, flux_form=parsed_args.flux_form)
+                # Create error estimator
+                ee = ErrorEstimator(options, mesh=mesh)
+                dq = Function(ee.P0, name="Difference quotient")
 
-                # Apply trapezium rule
-                if j in (0, N-1):
-                    _dq *= 0.5
-                _dq *= dt
-                dq += _dq
-            difference_quotients.append(dq)
+                # Loop over all exported timesteps
+                N = len(solutions['adjoint'][i])
+                for j in range(N):
+                    if i < num_meshes-1 and j == N-1:
+                        continue
 
-        # Plot difference quotient
-        outfiles['error'] = File(os.path.join(output_dir, 'Indicator2d.pvd'))
-        for dq in difference_quotients:
-            outfiles['error']._topology = None
-            outfiles['error'].write(dq)
+                    # Plot fields
+                    args = []
+                    for f in fields:
+                        args.extend(solutions[f][i][j].split())
+                        args[-2].rename("Adjoint velocity" if 'adjoint' in f else "Velocity")
+                        args[-1].rename("Adjoint elevation" if 'adjoint' in f else "Elevation")
+                        outfiles[f].write(*args[-2:])
 
-        # Construct isotropic metrics
-        metrics = [
-            isotropic_metric(dq)
-            for dq in difference_quotients
-        ]
+                    # Evaluate error indicator
+                    update_forcings(i*end_time/num_meshes + dt*(j + 1))
+                    _dq = ee.difference_quotient(*args, flux_form=parsed_args.flux_form)
+
+                    # Apply trapezium rule
+                    if j in (0, N-1):
+                        _dq *= 0.5
+                    _dq *= dt
+                    dq += _dq
+                difference_quotients.append(dq)
+
+            # Plot difference quotient
+            outfiles['error'] = File(os.path.join(output_dir, 'Indicator2d.pvd'))
+            for dq in difference_quotients:
+                outfiles['error']._topology = None
+                outfiles['error'].write(dq)
+
+            # Construct metrics
+            for i in range(num_meshes):
+                metrics[i].assign(isotropic_metric(difference_quotients[i]))
+                if fp_iteration == 0:
+                    print_output(f"\n--- Storing metric data on mesh {i+1}\n")
+                    metric_fname = os.path.join(output_dir, f'{approach}_metric{i}.h5')
+                    with DumbCheckpoint(metric_fname, mode=FILE_CREATE) as chk:
+                        chk.store(metrics[i], name="Metric")
+
+        # Process metrics
+        print_output(f"\n--- Metric processing {fp_iteration+1}\n")
         if parsed_args.space_only:
             for metric in metrics:
                 space_normalise(metric, target, parsed_args.norm_order)
@@ -271,6 +308,7 @@ for fp_iteration in range(parsed_args.maxiter+1):
             outfiles['metric'].write(metric)
 
         # Adapt meshes
+        print_output(f"\n--- Mesh adaptation {fp_iteration+1}\n")
         outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
         for i, metric in enumerate(metrics):
             meshes[i] = Mesh(adapt(meshes[i], metric).coordinates)
