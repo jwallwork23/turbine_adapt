@@ -9,7 +9,7 @@ class ErrorEstimator(object):
     Error estimation for shallow water tidal
     turbine modelling applications.
     """
-    def __init__(self, options, mesh=None, norm_type='L2'):
+    def __init__(self, options, mesh=None, norm_type='L2', error_estimator='difference_quotient'):
         """
         :args options: :class:`FarmOptions` parameter object.
         """
@@ -37,6 +37,9 @@ class ErrorEstimator(object):
         # Error estimation parameters
         assert norm_type in ('L1', 'L2')
         self.norm_type = norm_type
+        self.error_estimator = error_estimator
+        if self.error_estimator != 'difference_quotient':
+            raise NotImplementedError  # TODO
 
     def _Psi_u_steady(self, uv, elev):
         H = self.options.bathymetry2d + elev
@@ -171,6 +174,7 @@ class ErrorEstimator(object):
             flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS
         sp = {'ksp_type': 'preonly', 'pc_type': 'jacobi'}
         solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
+        psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
     def _psi_v_steady(self, *args):
@@ -262,6 +266,7 @@ class ErrorEstimator(object):
             flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS
         sp = {'ksp_type': 'preonly', 'pc_type': 'jacobi'}
         solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
+        psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
     def _psi_eta_steady(self, *args):
@@ -307,6 +312,7 @@ class ErrorEstimator(object):
             flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS
         sp = {'ksp_type': 'preonly', 'pc_type': 'jacobi'}
         solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
+        psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
     def _Psi_u_unsteady(self, uv, elev, uv_old, elev_old):
@@ -451,3 +457,10 @@ class ErrorEstimator(object):
             dq.project(dq + (Psi_i + psi_i/sqrt(self.h))*R_i)
         dq.interpolate(abs(dq))  # Ensure positivity
         return dq
+
+    def error_indicator(self, *args, **kwargs):
+        if self.error_estimator == 'difference_quotient':
+            flux_form = kwargs.get('flux_form', False)
+            return self.difference_quotient(*args, flux_form=flux_form)
+        else:
+            raise NotImplementedError  # TODO

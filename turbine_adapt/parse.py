@@ -13,6 +13,9 @@ class Parser(object):
             'approach': {'type': str, 'msg': """
                 Mesh adaptation approach (default '{:s}').
                 """},
+            'error_indicator': {'type': str, 'msg': """
+                Error indicator formulation (default '{:s}').
+                """},
             'level': {'type': int, 'msg': """
                 Resolution level of initial mesh (default {:d}).
                 """},

@@ -25,10 +25,13 @@ parser.add_argument('-adjoint_projection', False)
 parser.add_argument('-flux_form', False)
 parser.add_argument('-space_only', False)
 parser.add_argument('-approach', 'isotropic_dwr')
+parser.add_argument('-error_indicator', 'difference_quotient')
 parsed_args = parser.parse_args()
 num_meshes = parsed_args.num_meshes
 if parsed_args.approach not in ('isotropic_dwr', 'anisotropic_dwr'):
     raise ValueError(f"Adaptation approach {parsed_args.approach} not recognised.")
+if parsed_args.error_indicator != 'difference_quotient':
+    raise NotImplementedError
 approach = parsed_args.approach.split('_')[0]
 
 # Mesh independent setup
@@ -233,7 +236,7 @@ for fp_iteration in range(maxiter+1):
         fields = ['forward', 'forward_old', 'adjoint_next', 'adjoint']
 
         # Construct metric
-        difference_quotients = []
+        error_indicators = []
         with stop_annotating():
             print_output(f"\n--- Error estimation {fp_iteration+1}\n")
             for i, mesh in enumerate(meshes):
@@ -244,8 +247,8 @@ for fp_iteration in range(maxiter+1):
                 update_forcings = options.update_forcings
 
                 # Create error estimator
-                ee = ErrorEstimator(options, mesh=mesh)
-                dq = Function(ee.P0, name="Difference quotient")
+                ee = ErrorEstimator(options, mesh=mesh, error_indicator=parsed_args.error_indicator)
+                ei = Function(ee.P0, name="Error indicator")
 
                 # Loop over all exported timesteps
                 N = len(solutions['adjoint'][i])
@@ -263,24 +266,24 @@ for fp_iteration in range(maxiter+1):
 
                     # Evaluate error indicator
                     update_forcings(i*end_time/num_meshes + dt*(j + 1))
-                    _dq = ee.difference_quotient(*args, flux_form=parsed_args.flux_form)
+                    _ei = ee.error_indicator(*args, flux_form=parsed_args.flux_form)
 
                     # Apply trapezium rule
                     if j in (0, N-1):
-                        _dq *= 0.5
-                    _dq *= dt
-                    dq += _dq
-                difference_quotients.append(dq)
+                        _ei *= 0.5
+                    _ei *= dt
+                    ei += _ei
+                error_indicators.append(ei)
 
-            # Plot difference quotient
+            # Plot error indicators
             outfiles['error'] = File(os.path.join(output_dir, 'Indicator2d.pvd'))
-            for dq in difference_quotients:
+            for ei in error_indicators:
                 outfiles['error']._topology = None
-                outfiles['error'].write(dq)
+                outfiles['error'].write(ei)
 
             # Construct metrics
             for i in range(num_meshes):
-                metrics[i].assign(isotropic_metric(difference_quotients[i]))
+                metrics[i].assign(isotropic_metric(error_indicators[i]))
                 if fp_iteration == 0:
                     print_output(f"\n--- Storing metric data on mesh {i+1}\n")
                     metric_fname = os.path.join(output_dir, f'{approach}_metric{i}.h5')
