@@ -8,10 +8,11 @@ dir:
 	@mkdir -p resources
 	@mkdir -p plots/fixed_mesh
 	@mkdir -p plots/vorticity
-	@mkdir -p plots/dwr
+	@mkdir -p plots/isotropic
 	@mkdir -p outputs/fixed_mesh
 	@mkdir -p outputs/vorticity
-	@mkdir -p outputs/dwr
+	@mkdir -p outputs/isotropic
+	@mkdir -p outputs/anisotropic
 
 mesh:
 	@echo "Generating Delauney meshes of turbine array domain..."

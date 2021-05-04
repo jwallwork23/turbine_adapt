@@ -428,6 +428,17 @@ class ErrorEstimator(object):
         else:
             return [sqrt(interpolate(inner(div(proj), div(proj)), self.P0)) for proj in projections]
 
+    def recover_hessians(self, uv, elev):
+        """
+        Recover the Hessian of solution
+        tuple `(uv, elev)`.
+        """
+        return [
+            recover_hessian(uv[0], mesh=self.mesh),
+            recover_hessian(uv[1], mesh=self.mesh),
+            recover_hessian(elev, mesh=self.mesh),
+        ]
+
     def difference_quotient(self, *args, flux_form=False):
         """
         Evaluate the dual weighted residual

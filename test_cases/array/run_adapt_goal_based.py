@@ -28,16 +28,17 @@ parser.add_argument('-approach', 'isotropic_dwr')
 parser.add_argument('-error_indicator', 'difference_quotient')
 parsed_args = parser.parse_args()
 num_meshes = parsed_args.num_meshes
-if parsed_args.approach not in ('isotropic_dwr', 'anisotropic_dwr'):
+if parsed_args.approach not in ('isotropic_dwr', 'anisotropic_dwr'):  # NOTE: anisotropic => weighted Hessian
     raise ValueError(f"Adaptation approach {parsed_args.approach} not recognised.")
 if parsed_args.error_indicator != 'difference_quotient':
-    raise NotImplementedError
+    raise NotImplementedError(f"Error indicator {parsed_args.error_indicator} not recognised.")
 approach = parsed_args.approach.split('_')[0]
 
 # Mesh independent setup
 options = ArrayOptions(ramp_dir=os.path.join('outputs', 'fixed_mesh', f'level{parsed_args.level}'))
 end_time = parsed_args.num_tidal_cycles*options.tide_time
-output_dir = os.path.join(options.output_directory, 'dwr', f'target{parsed_args.target:.0f}')
+root_dir = os.path.join(options.output_directory, approach)
+output_dir = os.path.join(root_dir, f'target{parsed_args.target:.0f}')
 options.output_directory = create_directory(output_dir)
 Ct = options.quadratic_drag_coefficient
 ct = options.corrected_thrust_coefficient*Constant(pi/8)
@@ -155,6 +156,7 @@ converged_reason = None
 num_cells_old = None
 J_old = None
 for fp_iteration in range(maxiter+1):
+    outfiles = {}
     if fp_iteration < miniter:
         converged = False
     elif fp_iteration == maxiter:
@@ -179,8 +181,8 @@ for fp_iteration in range(maxiter+1):
     loaded = False
     if fp_iteration == 0:
         for i, metric in enumerate(metrics):
-            metric_fname = os.path.join(output_dir, f'{approach}_metric{i}.h5')
-            if os.path.exists(metric_fname):
+            metric_fname = os.path.join(root_dir, f'metric{i}')
+            if os.path.exists(metric_fname + '.h5'):
                 print_output(f"\n--- Loading metric data on mesh {i+1}\n")
                 loaded = True
                 with DumbCheckpoint(metric_fname, mode=FILE_READ) as chk:
@@ -227,16 +229,15 @@ for fp_iteration in range(maxiter+1):
             break
 
         # Create vtu output files
-        outfiles = {
-            'forward': File(os.path.join(output_dir, 'Forward2d.pvd')),
-            'forward_old': File(os.path.join(output_dir, 'ForwardOld2d.pvd')),
-            'adjoint_next': File(os.path.join(output_dir, 'AdjointNext2d.pvd')),
-            'adjoint': File(os.path.join(output_dir, 'Adjoint2d.pvd')),
-        }
+        outfiles['forward'] = File(os.path.join(output_dir, 'Forward2d.pvd'))
+        outfiles['forward_old'] = File(os.path.join(output_dir, 'ForwardOld2d.pvd'))
+        outfiles['adjoint_next'] = File(os.path.join(output_dir, 'AdjointNext2d.pvd'))
+        outfiles['adjoint'] = File(os.path.join(output_dir, 'Adjoint2d.pvd'))
         fields = ['forward', 'forward_old', 'adjoint_next', 'adjoint']
 
         # Construct metric
         error_indicators = []
+        hessians = []
         with stop_annotating():
             print_output(f"\n--- Error estimation {fp_iteration+1}\n")
             for i, mesh in enumerate(meshes):
@@ -247,8 +248,12 @@ for fp_iteration in range(maxiter+1):
                 update_forcings = options.update_forcings
 
                 # Create error estimator
-                ee = ErrorEstimator(options, mesh=mesh, error_indicator=parsed_args.error_indicator)
-                ei = Function(ee.P0, name="Error indicator")
+                ee = ErrorEstimator(options, mesh=mesh, error_estimator=parsed_args.error_indicator)
+                if approach == 'isotropic':
+                    error_indicators_step = [Function(ee.P0, name="Error indicator")]
+                else:
+                    error_indicators_step = [Function(ee.P0) for field in range(3)]
+                hessians_step = [] if approach == 'isotropic' else [Function(metrics[i]) for field in range(3)]
 
                 # Loop over all exported timesteps
                 N = len(solutions['adjoint'][i])
@@ -266,68 +271,88 @@ for fp_iteration in range(maxiter+1):
 
                     # Evaluate error indicator
                     update_forcings(i*end_time/num_meshes + dt*(j + 1))
-                    _ei = ee.error_indicator(*args, flux_form=parsed_args.flux_form)
+                    if approach == 'isotropic':
+                        _error_indicators_step = [ee.error_indicator(*args, flux_form=parsed_args.flux_form)]
+                        _hessians_step = []
+                    else:
+                        _error_indicators_step = ee.strong_residuals(*args[:4])
+                        _hessians_step = ee.recover_hessians(*args[6:])
+                        for _hessian_next, _hessian in zip(ee.recover_hessians(*args[4:6]), _hessians_step):
+                            _hessian += _hessian_next
+                            _hessian *= 0.5
 
                     # Apply trapezium rule
                     if j in (0, N-1):
-                        _ei *= 0.5
-                    _ei *= dt
-                    ei += _ei
-                error_indicators.append(ei)
+                        for _error_indicator in _error_indicators_step:
+                            _error_indicator *= 0.5
+                        for _H_i in _hessians_step:
+                            _H_i *= 0.5
+                    for error_indicator, _error_indicator in zip(error_indicators_step, _error_indicators_step):
+                        _error_indicator *= dt
+                        error_indicator += _error_indicator
+                    for hessian, _hessian in zip(hessians_step, _hessians_step):
+                        _hessian *= dt
+                        hessian += _hessian
+                error_indicators.append(error_indicators_step)
+                hessians.append(hessians_step)
 
             # Plot error indicators
-            outfiles['error'] = File(os.path.join(output_dir, 'Indicator2d.pvd'))
-            for ei in error_indicators:
-                outfiles['error']._topology = None
-                outfiles['error'].write(ei)
+            if approach == 'isotropic':
+                outfiles['error'] = File(os.path.join(output_dir, 'Indicator2d.pvd'))
+                for error_indicator in error_indicators:
+                    outfiles['error']._topology = None
+                    outfiles['error'].write(error_indicator[0])
 
             # Construct metrics
-            for i in range(num_meshes):
-                metrics[i].assign(isotropic_metric(error_indicators[i]))
+            for i, error_indicator in enumerate(error_indicators):
+                if approach == 'isotropic':
+                    metrics[i].assign(isotropic_metric(error_indicator[0]))
+                else:
+                    metrics[i].assign(anisotropic_metric(error_indicator, hessians[i], element_wise=False))
                 if fp_iteration == 0:
                     print_output(f"\n--- Storing metric data on mesh {i+1}\n")
-                    metric_fname = os.path.join(output_dir, f'{approach}_metric{i}.h5')
+                    metric_fname = os.path.join(root_dir, f'metric{i}')
                     with DumbCheckpoint(metric_fname, mode=FILE_CREATE) as chk:
                         chk.store(metrics[i], name="Metric")
 
-        # Process metrics
-        print_output(f"\n--- Metric processing {fp_iteration+1}\n")
-        if parsed_args.space_only:
-            for metric in metrics:
-                space_normalise(metric, target, parsed_args.norm_order)
-        else:
-            metrics = space_time_normalise(
-                metrics, end_time, timesteps, target, parsed_args.norm_order
-            )
-        metrics = enforce_element_constraints(
-            metrics, parsed_args.h_min, parsed_args.h_max
-        )
-
-        # Plot metrics
-        outfiles['metric'] = File(os.path.join(output_dir, 'Metric2d.pvd'))
+    # Process metrics
+    print_output(f"\n--- Metric processing {fp_iteration+1}\n")
+    if parsed_args.space_only:
         for metric in metrics:
-            metric.rename("Metric")
-            outfiles['metric']._topology = None
-            outfiles['metric'].write(metric)
+            space_normalise(metric, target, parsed_args.norm_order)
+    else:
+        metrics = space_time_normalise(
+            metrics, end_time, timesteps, target, parsed_args.norm_order
+        )
+    metrics = enforce_element_constraints(
+        metrics, parsed_args.h_min, parsed_args.h_max
+    )
 
-        # Adapt meshes
-        print_output(f"\n--- Mesh adaptation {fp_iteration+1}\n")
-        outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
-        for i, metric in enumerate(metrics):
-            meshes[i] = Mesh(adapt(meshes[i], metric).coordinates)
-            outfiles['mesh']._topology = None
-            outfiles['mesh'].write(meshes[i].coordinates)
-        num_cells = [mesh.num_cells() for mesh in meshes]
+    # Plot metrics
+    outfiles['metric'] = File(os.path.join(output_dir, 'Metric2d.pvd'))
+    for metric in metrics:
+        metric.rename("Metric")
+        outfiles['metric']._topology = None
+        outfiles['metric'].write(metric)
 
-        # Check for convergence of element count
-        elements_converged = False
-        if num_cells_old is not None:
-            elements_converged = True
-            for nc, _nc in zip(num_cells, num_cells_old):
-                if abs(nc - _nc) > parsed_args.element_rtol*_nc:
-                    elements_converged = False
-        num_cells_old = num_cells
-        if elements_converged:
-            print_output(f"Mesh element count converged to rtol {parsed_args.element_rtol}")
-            converged = True
-            converged_reason = 'converged element counts'
+    # Adapt meshes
+    print_output(f"\n--- Mesh adaptation {fp_iteration+1}\n")
+    outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
+    for i, metric in enumerate(metrics):
+        meshes[i] = Mesh(adapt(meshes[i], metric).coordinates)
+        outfiles['mesh']._topology = None
+        outfiles['mesh'].write(meshes[i].coordinates)
+    num_cells = [mesh.num_cells() for mesh in meshes]
+
+    # Check for convergence of element count
+    elements_converged = False
+    if num_cells_old is not None:
+        elements_converged = True
+        for nc, _nc in zip(num_cells, num_cells_old):
+            if abs(nc - _nc) > parsed_args.element_rtol*_nc:
+                elements_converged = False
+    num_cells_old = num_cells
+    if elements_converged:
+        print_output(f"Mesh element count converged to rtol {parsed_args.element_rtol}")
+        converged = True
+        converged_reason = 'converged element counts'
