@@ -26,6 +26,10 @@ J = ee.drag_coefficient*dot(uv, uv)**1.5*dx
 print("Power output = {:.4e}".format(assemble(J)))
 dJdu = derivative(J, ts.solution, TestFunction(V))
 solve(dFdu_transpose == dJdu, adj_sol, solver_parameters=ts.solver_parameters)
+z, zeta = adj_sol.split()
+z.rename("Adjoint velocity")
+zeta.rename("Adjoint elevation")
+File('outputs/adjoint.pvd').write(z, zeta)
 
 # Estimate error
 uv, elev = ts.solution.split()

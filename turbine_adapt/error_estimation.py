@@ -114,8 +114,8 @@ class ErrorEstimator(object):
         # Advection
         flux_terms += avg(uv_old[0])*jump(uv, self.n)
         ibp_terms += uv[0]*dot(uv, self.n)
+        uv_lax_friedrichs = self.options.lax_friedrichs_velocity_scaling_factor
         if self.options.use_lax_friedrichs_velocity:
-            uv_lax_friedrichs = self.options.lax_friedrichs_velocity_scaling_factor
             gamma = 0.5*abs(dot(avg(uv_old), self.n('-')))*uv_lax_friedrichs
             flux_terms += gamma*jump(uv[0])
 
@@ -147,29 +147,37 @@ class ErrorEstimator(object):
 
             # External pressure gradient
             un_jump = inner(uv - uv_ext, self.n)
-            eta_rie = 0.5*(elev + eta_ext) + sqrt(H/g)*un_jump
+            if funcs is not None:
+                eta_rie = 0.5*(elev + eta_ext) + sqrt(H/g)*un_jump
+            elif self.eta_is_dg:
+                eta_rie = elev + sqrt(H/g)*un_jump
             bnd_terms += -self.p0test*g*eta_rie*self.n[0]*ds_bnd
             if not self.eta_is_dg:
                 bnd_terms += self.p0test*g*eta*self.n[0]*ds_bnd
 
             # Advection
-            eta_jump = elev_old - eta_ext_old
-            un_rie = 0.5*inner(uv_old + uv_ext_old, self.n) + sqrt(g/H_old)*eta_jump
-            bnd_terms += -self.p0test*un_rie*0.5*(uv_ext[0] + uv[0])*ds_bnd
+            if funcs is not None:
+                eta_jump = elev_old - eta_ext_old
+                un_rie = 0.5*inner(uv_old + uv_ext_old, self.n) + sqrt(g/H_old)*eta_jump
+                bnd_terms += -self.p0test*un_rie*0.5*(uv_ext[0] + uv[0])*ds_bnd
+            elif self.options.use_lax_friedrichs_velocity:
+                gamma = 0.5*abs(dot(uv_old, self.n))*uv_lax_friedrichs
+                bnd_terms += -gamma*2*dot(uv, self.n)*self.n[0]
 
             # Viscosity
-            if 'un' in funcs:
-                delta_uv = (dot(uv, self.n) - funcs['un'])*self.n[0]
-            else:
-                if uv_ext is uv:
-                    continue
-                delta_uv = (uv - uv_ext)[0]
-            if self.options.use_grad_div_viscosity_term:
-                stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
-            else:
-                stress_jump = nu*outer(outer(delta_uv, self.n))
-            bnd_terms += -self.p0test*sigma*nu*delta_uv*ds_bnd
-            # TODO: What about symmetrisation term?
+            if funcs is not None:
+                if 'un' in funcs:
+                    delta_uv = (dot(uv, self.n) - funcs['un'])*self.n[0]
+                else:
+                    if uv_ext is uv:
+                        continue
+                    delta_uv = (uv - uv_ext)[0]
+                if self.options.use_grad_div_viscosity_term:
+                    stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
+                else:
+                    stress_jump = nu*outer(outer(delta_uv, self.n))
+                bnd_terms += -self.p0test*sigma*nu*delta_uv*ds_bnd
+                # TODO: What about symmetrisation term?
 
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
@@ -206,8 +214,8 @@ class ErrorEstimator(object):
         # Advection
         flux_terms += avg(uv[1])*jump(uv, self.n)
         ibp_terms += uv[1]*dot(uv, self.n)
+        uv_lax_friedrichs = self.options.lax_friedrichs_velocity_scaling_factor
         if self.options.use_lax_friedrichs_velocity:
-            uv_lax_friedrichs = self.options.lax_friedrichs_velocity_scaling_factor
             gamma = 0.5*abs(dot(avg(uv_old), self.n('-')))*uv_lax_friedrichs
             flux_terms += gamma*jump(uv[1])
 
@@ -239,29 +247,37 @@ class ErrorEstimator(object):
 
             # External pressure gradient
             un_jump = inner(uv - uv_ext, self.n)
-            eta_rie = 0.5*(elev + eta_ext) + sqrt(H/g)*un_jump
+            if funcs is not None:
+                eta_rie = 0.5*(elev + eta_ext) + sqrt(H/g)*un_jump
+            elif self.eta_is_dg:
+                eta_rie = elev + sqrt(H/g)*un_jump
             bnd_terms += -self.p0test*g*eta_rie*self.n[1]*ds_bnd
             if not self.eta_is_dg:
                 bnd_terms += self.p0test*g*eta*self.n[1]*ds_bnd
 
             # Advection
-            eta_jump = elev_old - eta_ext_old
-            un_rie = 0.5*inner(uv_old + uv_ext_old, self.n) + sqrt(g/H)*eta_jump
-            bnd_terms += -self.p0test*un_rie*0.5*(uv_ext[1] + uv[1])*ds_bnd
+            if funcs is not None:
+                eta_jump = elev_old - eta_ext_old
+                un_rie = 0.5*inner(uv_old + uv_ext_old, self.n) + sqrt(g/H)*eta_jump
+                bnd_terms += -self.p0test*un_rie*0.5*(uv_ext[1] + uv[1])*ds_bnd
+            elif self.options.use_lax_friedrichs_velocity:
+                gamma = 0.5*abs(dot(uv_old, self.n))*uv_lax_friedrichs
+                bnd_terms += -gamma*2*dot(uv, self.n)*self.n[1]
 
             # Viscosity
-            if 'un' in funcs:
-                delta_uv = (dot(uv, self.n) - funcs['un'])*self.n[1]
-            else:
-                if uv_ext is uv:
-                    continue
-                delta_uv = (uv - uv_ext)[1]
-            if self.options.use_grad_div_viscosity_term:
-                stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
-            else:
-                stress_jump = nu*outer(outer(delta_uv, self.n))
-            bnd_terms += -self.p0test*sigma*nu*delta_uv*ds_bnd
-            # TODO: What about symmetrisation term?
+            if funcs is not None:
+                if 'un' in funcs:
+                    delta_uv = (dot(uv, self.n) - funcs['un'])*self.n[1]
+                else:
+                    if uv_ext is uv:
+                        continue
+                    delta_uv = (uv - uv_ext)[1]
+                if self.options.use_grad_div_viscosity_term:
+                    stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
+                else:
+                    stress_jump = nu*outer(outer(delta_uv, self.n))
+                bnd_terms += -self.p0test*sigma*nu*delta_uv*ds_bnd
+                # TODO: What about symmetrisation term?
 
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
@@ -297,17 +313,18 @@ class ErrorEstimator(object):
         bnd_terms = 0
         bnd_conditions = self.options.bnd_conditions
         for bnd_marker in bnd_conditions:
+            funcs = bnd_conditions.get(bnd_marker)
             ds_bnd = ds(int(bnd_marker))
             eta_ext, uv_ext = self._get_bnd_functions(elev, uv, bnd_marker)
             eta_ext_old, uv_ext_old = self._get_bnd_functions(elev_old, uv_old, bnd_marker)
-
-            h_av = 0.5*(H + eta_ext_old + b)
-            eta_jump = elev - eta_ext
-            un_rie = 0.5*inner(uv + uv_ext, self.n) + sqrt(g/h_av)*eta_jump
-            un_jump = inner(uv_old - uv_ext_old, self.n)
-            eta_rie = 0.5*(elev_old + eta_ext_old) + sqrt(h_av/g)*un_jump
-            h_rie = b + eta_rie
-            bnd_terms += -self.p0test*h_rie*un_rie*ds_bnd
+            if funcs is not None:
+                h_av = 0.5*(H + eta_ext_old + b)
+                eta_jump = elev - eta_ext
+                un_rie = 0.5*inner(uv + uv_ext, self.n) + sqrt(g/h_av)*eta_jump
+                un_jump = inner(uv_old - uv_ext_old, self.n)
+                eta_rie = 0.5*(elev_old + eta_ext_old) + sqrt(h_av/g)*un_jump
+                h_rie = b + eta_rie
+                bnd_terms += -self.p0test*h_rie*un_rie*ds_bnd
 
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
