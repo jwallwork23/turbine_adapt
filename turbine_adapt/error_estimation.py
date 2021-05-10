@@ -71,12 +71,18 @@ class ErrorEstimator(object):
 
     def _get_bnd_functions(self, eta_in, uv_in, bnd_in):
         funcs = self.options.bnd_conditions.get(bnd_in)
-        if 'elev' in funcs and 'un' in funcs:
+        if 'elev' in funcs and 'uv' in funcs:
+            eta_ext = funcs['elev']
+            uv_ext = funcs['uv']
+        elif 'elev' in funcs and 'un' in funcs:
             eta_ext = funcs['elev']
             uv_ext = funcs['un']*self.n
         elif 'elev' in funcs:
             eta_ext = funcs['elev']
             uv_ext = uv_in
+        elif 'uv' in funcs:
+            eta_ext = eta_in
+            uv_ext = funcs['uv']
         elif 'un' in funcs:
             eta_ext = eta_in
             uv_ext = funcs['un']*self.n
@@ -153,11 +159,11 @@ class ErrorEstimator(object):
 
             # Viscosity
             if 'un' in funcs:
-                delta_uv = (dot(uv, self.n) - funcs['un'])*n[0]
+                delta_uv = (dot(uv, self.n) - funcs['un'])*self.n[0]
             else:
                 if uv_ext is uv:
                     continue
-                delta_uv = uv - uv_ext
+                delta_uv = (uv - uv_ext)[0]
             if self.options.use_grad_div_viscosity_term:
                 stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
             else:
@@ -245,11 +251,11 @@ class ErrorEstimator(object):
 
             # Viscosity
             if 'un' in funcs:
-                delta_uv = (dot(uv, self.n) - funcs['un'])*n[1]
+                delta_uv = (dot(uv, self.n) - funcs['un'])*self.n[1]
             else:
                 if uv_ext is uv:
                     continue
-                delta_uv = uv - uv_ext
+                delta_uv = (uv - uv_ext)[1]
             if self.options.use_grad_div_viscosity_term:
                 stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
             else:

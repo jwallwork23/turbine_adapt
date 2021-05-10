@@ -157,11 +157,11 @@ class ArrayOptions(FarmOptions):
     def get_bnd_conditions(self, V_2d):
         self.elev_in = Function(V_2d.sub(1))
         self.elev_out = Function(V_2d.sub(1))
-        inflow_tag = 4
-        outflow_tag = 2
         self.bnd_conditions = {
-            inflow_tag: {'elev': self.elev_in},
-            outflow_tag: {'elev': self.elev_out},
+            1: {'un': Constant(0.0)},    # bottom
+            2: {'elev': self.elev_out},  # right
+            3: {'un': Constant(0.0)},    # top
+            4: {'elev': self.elev_in},   # left
         }
 
     def apply_boundary_conditions(self, solver_obj):

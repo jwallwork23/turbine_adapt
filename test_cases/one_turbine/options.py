@@ -70,10 +70,11 @@ class TurbineOptions(FarmOptions):
         outflow_tag = 2
         inflow_bc = {'flux': -flux, 'elev': Constant(0.0)}
         outflow_bc = {'flux': flux, 'elev': Constant(0.0)}
-        solver_obj.bnd_functions['shallow_water'] = {
+        self.bnd_conditions = {
             inflow_tag: inflow_bc,
             outflow_tag: outflow_bc
         }
+        solver_obj.bnd_functions['shallow_water'] = self.bnd_conditions
 
     def apply_initial_conditions(self, solver_obj):
         solver_obj.assign_initial_conditions(uv=Constant(as_vector([1.0e-04, 0])))

@@ -30,5 +30,5 @@ solve(dFdu_transpose == dJdu, adj_sol, solver_parameters=ts.solver_parameters)
 # Estimate error
 uv, elev = ts.solution.split()
 z, zeta = adj_sol.split()
-dq = ee.difference_quotient(uv, elev, 'unused', 'unused', z, zeta, 'unused', 'unused')
+dq = ee.difference_quotient(uv, elev, z, zeta)
 File('outputs/difference_quotient.pvd').write(dq)

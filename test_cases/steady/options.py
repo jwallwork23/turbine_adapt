@@ -54,11 +54,17 @@ class SteadyTurbineOptions(FarmOptions):
         self.element_family = 'dg-dg'
 
     def apply_boundary_conditions(self, solver_obj):
-        solver_obj.bnd_functions['shallow_water'] = {
-            1: {'uv': Constant(as_vector([5.0, 0.0]))},
+        solver_obj.create_function_spaces()
+        u_ext = Function(solver_obj.function_spaces.U_2d)
+        u_ext.interpolate(as_vector([5.0, 0.0]))
+        self.bnd_conditions = {
+            1: {'uv': u_ext},
             2: {'elev': Constant(0.0)},
             3: {'un': Constant(0.0)},
         }
+        solver_obj.bnd_functions['shallow_water'] = self.bnd_conditions
 
     def apply_initial_conditions(self, solver_obj):
-        solver_obj.assign_initial_conditions(uv=Constant(as_vector([5.0, 0.0])))
+        u_init = Function(solver_obj.function_spaces.U_2d)
+        u_init.interpolate(as_vector([5.0, 0.0]))
+        solver_obj.assign_initial_conditions(uv=u_init)

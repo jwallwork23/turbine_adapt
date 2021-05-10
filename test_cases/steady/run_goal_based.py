@@ -37,7 +37,7 @@ for i in range(maxiter):
     # Estimate error
     uv, elev = ts.solution.split()
     z, zeta = adj_sol.split()
-    dq = ee.difference_quotient(uv, elev, 'unused', 'unused', z, zeta, 'unused', 'unused')
+    dq = ee.difference_quotient(uv, elev, z, zeta)
 
     # Construct metric
     M = isotropic_metric(dq)

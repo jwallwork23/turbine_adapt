@@ -63,7 +63,7 @@ class TwoTurbineOptions(FarmOptions):
         # Physics
         self.depth = 40.0  # Typical depth in Pentland Firth
         self.horizontal_velocity_scale = Constant(5.0)  # Typical fast flow in Pentland Firth
-        self.inflow_velocity = as_vector([self.horizontal_velocity_scale.values()[0], 0.0])
+        self.inflow_velocity = [self.horizontal_velocity_scale.values()[0], 0.0]
         self.horizontal_viscosity = Constant(nu)
         self.bathymetry2d = Function(P1_2d)
         self.bathymetry2d.assign(self.depth)
@@ -92,13 +92,16 @@ class TwoTurbineOptions(FarmOptions):
         flux = Constant(self.depth*self.domain_width)*self.flow_speed_ramped
         inflow_tag = 1
         outflow_tag = 2
-        solver_obj.bnd_functions['shallow_water'] = {
+        self.bnd_conditions = {
             inflow_tag: {'flux': -flux, 'elev': Constant(0.0)},
             outflow_tag: {'flux': flux, 'elev': Constant(0.0)},
         }
+        solver_obj.bnd_functions['shallow_water'] = self.bnd_conditions
 
     def apply_initial_conditions(self, solver_obj):
-        solver_obj.assign_initial_conditions(uv=Constant(as_vector([1.0e-04, 0.0])))
+        uv = Function(solver_obj.function_spaces.V_2d).split()[0]
+        uv.interpolate(as_vector([1.0e-04, 0.0]))
+        solver_obj.assign_initial_conditions(uv=uv)
 
     def get_update_forcings(self):
         tc = Constant(0.0)
