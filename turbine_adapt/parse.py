@@ -55,6 +55,9 @@ class Parser(object):
             'h_max': {'type': float, 'msg': """
                 Maximum tolerated element size in metres (default {:.4e}.
                 """},
+            'turbine_h_max': {'type': float, 'msg': """
+                Maximum tolerated element size in turbine footprints in metres (default {:.4e}.
+                """},
             'plot_bathymetry': {'type': bool, 'msg': """
                 Toggle plotting of bathymetry field (default {:b}).
                 """},

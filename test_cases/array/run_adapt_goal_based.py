@@ -10,8 +10,8 @@ parser = Parser(prog='turbine/array/run_goal_based.py')
 parser.add_argument('-level', 0, help="""
     Mesh resolution level inside the refined region.
     Choose a value from [0, 1, 2, 3, 4] (default 0).""")
-parser.add_argument('-num_tidal_cycles', 1.0)
-parser.add_argument('-num_meshes', 80)
+parser.add_argument('-num_tidal_cycles', 0.5)
+parser.add_argument('-num_meshes', 40)
 parser.add_argument('-miniter', 3)
 parser.add_argument('-maxiter', 5)
 parser.add_argument('-element_rtol', 0.005)
@@ -20,6 +20,7 @@ parser.add_argument('-norm_order', 1.0)
 parser.add_argument('-target', 5000.0)
 parser.add_argument('-h_min', 0.01)
 parser.add_argument('-h_max', 100.0)
+parser.add_argument('-turbine_h_max', 10.0)
 parser.add_argument('-adjoint_projection', True)
 parser.add_argument('-flux_form', False)
 parser.add_argument('-space_only', False)
@@ -32,6 +33,8 @@ if parsed_args.approach not in ('isotropic_dwr', 'anisotropic_dwr'):  # NOTE: an
 if parsed_args.error_indicator != 'difference_quotient':
     raise NotImplementedError(f"Error indicator {parsed_args.error_indicator} not recognised.")
 approach = parsed_args.approach.split('_')[0]
+hmax = Constant(parsed_args.h_max)
+turbine_hmax = Constant(parsed_args.turbine_h_max)
 
 # Mesh independent setup
 options = ArrayOptions(ramp_dir=os.path.join('outputs', 'fixed_mesh', f'level{parsed_args.level}'))
@@ -81,6 +84,11 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
         if i_export > 0:
             cb._outfile.counter = itertools.count(start=i_export + 1)  # FIXME
 
+    # Callback which writes power output to HDF5
+    cb = PowerOutputCallback(solver_obj)
+    cb._create_new_file = i_export == 0
+    solver_obj.add_callback(cb, 'timestep')
+
     # Set initial conditions for current mesh iteration
     solver_obj.create_exporters()
     uv, elev = ic.split()
@@ -96,7 +104,7 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
     # Turbine parametrisation
     P0 = FunctionSpace(mesh, "DG", 0)
     _Ct = Constant(Ct)
-    for i, subdomain_id in enumerate(options.farm_ids):
+    for i, subdomain_id in enumerate(options.farm_ids):  # TODO: Use union
         subset = mesh.cell_subset(subdomain_id)
         _Ct = _Ct + interpolate(ct, P0, subset=subset)
 
@@ -323,8 +331,19 @@ for fp_iteration in range(maxiter+1):
         metrics = space_time_normalise(
             metrics, end_time, timesteps, target, parsed_args.norm_order
         )
+
+    # Enforce element constraints, accounting for turbines
+    h_max = []
+    for mesh in meshes:
+        expr = Constant(hmax)
+        P0 = FunctionSpace(mesh, "DG", 0)
+        for i, subdomain_id in enumerate(options.farm_ids):  # TODO: Use union
+            subset = mesh.cell_subset(subdomain_id)
+            expr = expr + interpolate(turbine_hmax - hmax, P0, subset=subset)
+        hmax_func = interpolate(expr, FunctionSpace(mesh, "CG", 1))
+        h_max.append(hmax_func)
     metrics = enforce_element_constraints(
-        metrics, parsed_args.h_min, parsed_args.h_max
+        metrics, parsed_args.h_min, h_max
     )
 
     # Plot metrics
@@ -355,3 +374,7 @@ for fp_iteration in range(maxiter+1):
         print_output(f"Mesh element count converged to rtol {parsed_args.element_rtol}")
         converged = True
         converged_reason = 'converged element counts'
+
+# Log convergence reason
+with open(os.path.join(output_dir, 'log'), 'a+') as f:
+    f.write(f"Converged in {fp_iteration+1} iterations due to {converged_reason}")
