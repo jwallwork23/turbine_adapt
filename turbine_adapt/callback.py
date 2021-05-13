@@ -63,8 +63,7 @@ class PeakVorticityCallback(DiagnosticCallback):
         return (zeta.min(), zeta.max())
 
     def message_str(self, *args):
-        line = 'min/max vorticity: {:14.8e}, {:14.8e}'
-        return line.format(args[0], args[1])
+        return f"min/max vorticity: {args[0]:14.8e}, {args[1]:14.8e}"
 
 
 class PowerOutputCallback(turbines.TurbineFunctionalCallback):
@@ -73,14 +72,14 @@ class PowerOutputCallback(turbines.TurbineFunctionalCallback):
     print statements.
     """
     def message_str(self, current_power, average_power, average_profit):
-        power = sum(current_power)
+        power = 1030.0*sum(current_power)
         if power < 1.0e+03:
-            return 'current power:     {:5.3f} W'.format(power)
+            return f"current power:     {power:5.3f} W"
         elif power < 1.0e+06:
-            return 'current power:     {:5.3f} kW'.format(power/1.0e+03)
+            return f"current power:     {power/1.0e+03:5.3f} kW"
         elif power < 1.0e+09:
-            return 'current power:     {:5.3f} MW'.format(power/1.0e+06)
+            return f"current power:     {power/1.0e+06:5.3f} MW"
         elif power < 1.0e+12:
-            return 'current power:     {:5.3f} GW'.format(power/1.0e+09)
+            return f"current power:     {power/1.0e+09:5.3f} GW"
         else:
-            return 'current power:     {:10.4e} W'.format(power)
+            return f"current power:     {power:10.4e} W"
