@@ -27,7 +27,7 @@ class ArrayOptions(FarmOptions):
         self.array_ids = np.array([[2, 5, 8, 11, 14],
                                    [3, 6, 9, 12, 15],
                                    [4, 7, 10, 13, 16]])
-        self.farm_ids = tuple(self.array_ids.reshape((self.num_turbines, )))
+        self.farm_ids = tuple(self.array_ids.transpose().reshape((self.num_turbines, )))
         self.thrust_coefficient = 2.985
 
         # Domain and mesh
