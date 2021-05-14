@@ -71,6 +71,7 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
     options.apply_boundary_conditions(solver_obj)
     options.J = J
     recover_vorticity = model_options.pop('recover_vorticity', False)
+    compute_power = model_options.pop('compute_power', False)
     model_options.setdefault('no_exports', True)
     options.update(model_options)
     if not options.no_exports:
@@ -85,9 +86,10 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
             cb._outfile.counter = itertools.count(start=i_export + 1)  # FIXME
 
     # Callback which writes power output to HDF5
-    cb = PowerOutputCallback(solver_obj)
-    cb._create_new_file = i_export == 0
-    solver_obj.add_callback(cb, 'timestep')
+    if compute_power:
+        cb = PowerOutputCallback(solver_obj)
+        cb._create_new_file = i_export == 0
+        solver_obj.add_callback(cb, 'timestep')
 
     # Set initial conditions for current mesh iteration
     solver_obj.create_exporters()
@@ -207,7 +209,8 @@ for fp_iteration in range(maxiter+1):
             with stop_annotating():
                 print_output("\n--- Final forward run\n")
                 J, checkpoints = get_checkpoints(
-                    *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
+                    *args, timesteps_per_export=dt_per_export,
+                    solver_kwargs=dict(no_exports=False, compute_power=True),
                 )
         else:
             print_output(f"\n--- Forward-adjoint sweep {fp_iteration+1}\n")
@@ -225,7 +228,8 @@ for fp_iteration in range(maxiter+1):
                 with stop_annotating():
                     print_output("\n--- Final forward run\n")
                     J, checkpoints = get_checkpoints(
-                        *args, timesteps_per_export=dt_per_export, solver_kwargs=dict(no_exports=False),
+                        *args, timesteps_per_export=dt_per_export,
+                        solver_kwargs=dict(no_exports=False, compute_power=True),
                     )
         J_old = J
 
