@@ -11,22 +11,27 @@ parser.add_argument('-level', 0, help="""
     Mesh resolution level inside the refined region.
     Choose a value from [0, 1, 2, 3, 4] (default 0).""")
 parser.add_argument('-approach', 'fixed_mesh')
-parser.add_argument('-target', 5000*400)
-args = parser.parse_args()
-assert args.level in [0, 1, 2, 3, 4, 5]
+parser.add_argument('-target', 5000)
+parsed_args = parser.parse_args()
+approach = parsed_args.approach
+level = parsed_args.level
+target = parsed_args.target
+assert level in [0, 1, 2, 3, 4, 5]
 
 # Load data
-if args.approach == 'fixed_mesh':
-    input_dir = 'level{:d}'.format(args.level)
-    ext = '_level{:d}.pdf'.format(args.level)
+if approach == 'fixed_mesh':
+    input_dir = 'level{:d}'.format(level)
+    ext = '_level{:d}.pdf'.format(level)
 else:
-    input_dir = 'target{:.0f}'.format(args.target)
-    ext = '_target{:.0f}.pdf'.format(args.target)
-input_dir = os.path.join(os.path.dirname(__file__), 'outputs', args.approach, input_dir)
+    input_dir = 'target{:.0f}'.format(target)
+    ext = '_target{:.0f}.pdf'.format(target)
+input_dir = os.path.join(os.path.dirname(__file__), 'outputs', approach, input_dir)
 with h5py.File(os.path.join(input_dir, 'diagnostic_turbine.hdf5'), 'r') as f:
     power = np.array(f['current_power'])
     time = np.array(f['time'])
-    time /= 4464.0
+time /= 4464.0
+if approach != 'fixed_mesh':
+    time += 1.0
 
 colours = ['black', 'dimgrey', 'grey', 'darkgrey', 'lightgrey']
 
@@ -42,7 +47,7 @@ axes.set_xticks([1, 1.125, 1.25, 1.375, 1.5])
 axes.set_ylabel(r'Power output [$\mathrm{MW}$]')
 axes.grid(True)
 plt.tight_layout()
-plot_dir = os.path.join(os.path.dirname(__file__), 'plots', args.approach)
+plot_dir = os.path.join(os.path.dirname(__file__), 'plots', approach)
 plt.savefig(os.path.join(plot_dir, 'power_output' + ext))
 
 # Plot power output of each column
@@ -55,6 +60,7 @@ axes.set_xlabel(r'Time/$T_{\mathrm{tide}}$')
 axes.set_ylabel(r'Power output [$\mathrm{MW}$]')
 axes.set_xlim([1, 1.5])
 axes.set_xticks([1, 1.125, 1.25, 1.375, 1.5])
+axes.set_ylim([0, 15])
 axes.grid(True)
 plt.tight_layout()
 plt.savefig(os.path.join(plot_dir, 'power_output_column' + ext))
