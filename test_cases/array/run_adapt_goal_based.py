@@ -26,6 +26,7 @@ parser.add_argument('-flux_form', False)
 parser.add_argument('-space_only', False)
 parser.add_argument('-approach', 'isotropic_dwr')
 parser.add_argument('-error_indicator', 'difference_quotient')
+parser.add_argument('-load_index', 0)
 parsed_args = parser.parse_args()
 num_meshes = parsed_args.num_meshes
 if parsed_args.approach not in ('isotropic_dwr', 'anisotropic_dwr'):  # NOTE: anisotropic => weighted Hessian
@@ -164,7 +165,9 @@ converged = False
 converged_reason = None
 num_cells_old = None
 J_old = None
-for fp_iteration in range(maxiter+1):
+load_index = parsed_args.load_index
+fp_iteration = load_index
+while fp_iteration <= maxiter:
     outfiles = {}
     if fp_iteration < miniter:
         converged = False
@@ -172,6 +175,16 @@ for fp_iteration in range(maxiter+1):
         converged = True
         if converged_reason is None:
             converged_reason = 'maximum number of iterations reached'
+
+    # Load meshes, if requested
+    if load_index > 0 and fp_iteration == load_index:
+        for i in range(num_meshes):
+            mesh_fname = os.path.join(output_dir, f"mesh_fp{fp_iteration}_{i}")
+            if not os.path.exists(mesh_fname + '.h5'):
+                raise IOError(f"Cannot load mesh file {mesh_fname}.")
+            plex = PETSc.DMPlex().create()
+            plex.createFromFile(mesh_fname + '.h5')
+            meshes[i] = Mesh(plex)
 
     # Create function spaces
     spaces = [
@@ -188,9 +201,12 @@ for fp_iteration in range(maxiter+1):
 
     # Load metric data for first iteration if available
     loaded = False
-    if fp_iteration == 0:
+    if fp_iteration == load_index:
         for i, metric in enumerate(metrics):
-            metric_fname = os.path.join(root_dir, f'metric{i}')
+            if load_index == 0:
+                metric_fname = os.path.join(root_dir, f'metric{i}')
+            else:
+                metric_fname = os.path.join(output_dir, f'metric{i}_fp{fp_iteration}')
             if os.path.exists(metric_fname + '.h5'):
                 print_output(f"\n--- Loading metric data on mesh {i+1}\n")
                 loaded = True
@@ -213,7 +229,7 @@ for fp_iteration in range(maxiter+1):
                     solver_kwargs=dict(no_exports=False, compute_power=True),
                 )
         else:
-            print_output(f"\n--- Forward-adjoint sweep {fp_iteration+1}\n")
+            print_output(f"\n--- Forward-adjoint sweep {fp_iteration}\n")
             J, solutions = solve_adjoint(
                 *args, timesteps_per_export=dt_per_export,
                 solves_per_timestep=solves_per_dt,
@@ -250,7 +266,7 @@ for fp_iteration in range(maxiter+1):
         error_indicators = []
         hessians = []
         with stop_annotating():
-            print_output(f"\n--- Error estimation {fp_iteration+1}\n")
+            print_output(f"\n--- Error estimation {fp_iteration}\n")
             for i, mesh in enumerate(meshes):
                 for f in fields:
                     outfiles[f]._topology = None  # Allow writing a different mesh
@@ -320,14 +336,18 @@ for fp_iteration in range(maxiter+1):
                     metrics[i].assign(isotropic_metric(error_indicator[0]))
                 else:
                     metrics[i].assign(anisotropic_metric(error_indicator, hessians[i], element_wise=False))
+
+                print_output(f"\n--- Storing metric data on mesh {i+1}\n")
+                metric_fname = os.path.join(output_dir, f'metric{i}_fp{fp_iteration}')
+                with DumbCheckpoint(metric_fname, mode=FILE_CREATE) as chk:
+                    chk.store(metrics[i], name="Metric")
                 if fp_iteration == 0:
-                    print_output(f"\n--- Storing metric data on mesh {i+1}\n")
                     metric_fname = os.path.join(root_dir, f'metric{i}')
                     with DumbCheckpoint(metric_fname, mode=FILE_CREATE) as chk:
                         chk.store(metrics[i], name="Metric")
 
     # Process metrics
-    print_output(f"\n--- Metric processing {fp_iteration+1}\n")
+    print_output(f"\n--- Metric processing {fp_iteration}\n")
     if parsed_args.space_only:
         for metric in metrics:
             space_normalise(metric, target, parsed_args.norm_order)
@@ -358,7 +378,7 @@ for fp_iteration in range(maxiter+1):
         outfiles['metric'].write(metric)
 
     # Adapt meshes
-    print_output(f"\n--- Mesh adaptation {fp_iteration+1}\n")
+    print_output(f"\n--- Mesh adaptation {fp_iteration}\n")
     outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
     for i, metric in enumerate(metrics):
         meshes[i] = Mesh(adapt(meshes[i], metric).coordinates)
@@ -378,6 +398,16 @@ for fp_iteration in range(maxiter+1):
         print_output(f"Mesh element count converged to rtol {parsed_args.element_rtol}")
         converged = True
         converged_reason = 'converged element counts'
+
+    # Save mesh data to disk
+    if COMM_WORLD.size == 1:
+        for i, mesh in enumerate(meshes):
+            mesh_fname = os.path.join(output_dir, f"mesh_fp{fp_iteration}_{i}")
+            viewer = PETSc.Viewer().createHDF5(mesh_fname, 'w')
+            viewer(mesh.topology_dm)
+
+    # Increment
+    fp_iteration += 1
 
 # Log convergence reason
 with open(os.path.join(output_dir, 'log'), 'a+') as f:

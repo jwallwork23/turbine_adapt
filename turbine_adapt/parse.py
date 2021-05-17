@@ -78,6 +78,9 @@ class Parser(object):
                 Toggle whether to use the flux form of the difference quotient
                 error indicator (default {:b}).
                 """},
+            'load_index': {'type': int, 'msg': """
+                Index for loading mesh and metric data from file (default {:d}).
+                """},
         }
         self._added = {}
 
