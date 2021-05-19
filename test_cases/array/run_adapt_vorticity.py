@@ -3,6 +3,8 @@ import itertools
 from options import ArrayOptions
 
 
+stop_annotating()
+
 # Parse arguments
 parser = Parser(prog='turbine/array/run_adapt_vorticity.py')
 parser.add_argument('-level', 0, help="""

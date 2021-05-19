@@ -2,6 +2,8 @@ from turbine_adapt import *
 from options import ArrayOptions
 
 
+stop_annotating()
+
 # Parse arguments
 parser = Parser(prog='turbine/array/ramp.py')
 parser.add_argument('-level', 0, help="""

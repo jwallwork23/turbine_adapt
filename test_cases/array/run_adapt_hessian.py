@@ -1,6 +1,7 @@
 from turbine_adapt import *
 from options import ArrayOptions
 
+stop_annotating()
 
 # Parse arguments
 parser = Parser(prog='turbine/array/run_adapt_hessian.py')
