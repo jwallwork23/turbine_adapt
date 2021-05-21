@@ -5,8 +5,10 @@ import sys
 from matplotlib.lines import Line2D
 
 
+staggered = True
+
 # Set parameters
-options = ArrayOptions()
+options = ArrayOptions(staggered=staggered)
 
 # Plotting
 if COMM_WORLD.size > 1:
@@ -27,7 +29,10 @@ deltay = 7.5*d
 centres = []
 for i in range(-2, 3):
     for j in range(1, -2, -1):
-        centres.append((i*deltax, j*deltay))
+        if staggered:
+            centres.append((i*deltax, (j + 0.25*(-1)**i)*deltay))
+        else:
+            centres.append((i*deltax, j*deltay))
 
 # Plot whole mesh
 fig, axes = plt.subplots(figsize=(12, 4))
@@ -43,14 +48,20 @@ for i, loc in enumerate(centres):
     patch_kwargs["edgecolor"] = f"C{i // 3}"
     centre = (loc[0]-w/2, loc[1]-d/2)
     axes.add_patch(ptch.Rectangle(centre, w, d, **patch_kwargs))
-plt.savefig(os.path.join(di, 'mesh.pdf'))
+fname = "mesh"
+if staggered:
+    fname += "_staggered"
+plt.savefig(os.path.join(di, fname + '.pdf'))
 
 # Zoom in on array region
 axes.set_xlim([-625, 625])
 axes.set_ylim([-210, 210])
 axes.set_xticks(np.linspace(-600, 600, 7))
 axes.set_yticks(np.linspace(-200, 200, 9))
-plt.savefig(os.path.join(di, "mesh_zoom.pdf"))
+fname = "mesh_zoom"
+if staggered:
+    fname += "_staggered"
+plt.savefig(os.path.join(di, fname + ".pdf"))
 
 colours = ['black', 'dimgrey', 'grey', 'darkgrey', 'lightgrey']
 
@@ -80,8 +91,11 @@ patch_kwargs["edgecolor"] = 'C0'
 patch = ptch.Rectangle((-w/2, -d/2), w, d, **patch_kwargs)
 patches.append(patch)
 axes.add_patch(patch)
-plt.savefig(os.path.join(di, 'domain.pdf'))
-plt.savefig(os.path.join(di, 'domain.jpg'))
+fname = "domain"
+if staggered:
+    fname += "_staggered"
+plt.savefig(os.path.join(di, fname + '.pdf'))
+plt.savefig(os.path.join(di, fname + '.jpg'))
 
 plt.figure()
 plt.gca().axis(False)
@@ -94,5 +108,6 @@ labels = [r'$\Gamma_{\mathrm{freeslip}}$', r'$\Gamma_F$',
           'Zoom region']
 plt.legend(lines, labels)
 plt.tight_layout()
-plt.savefig(os.path.join(di, 'legend_domain.pdf'))
-plt.savefig(os.path.join(di, 'legend_domain.jpg'))
+fname = "legend_domain"
+plt.savefig(os.path.join(di, fname + '.pdf'))
+plt.savefig(os.path.join(di, fname + '.jpg'))
