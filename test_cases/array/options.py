@@ -22,17 +22,18 @@ class ArrayOptions(FarmOptions):
     domain_length = PositiveFloat(3000.0).tag(config=False)
     domain_width = PositiveFloat(1000.0).tag(config=False)
 
-    def __init__(self, level=0, ramp_dir=None, meshgen=False, mesh=None, **kwargs):
+    def __init__(self, level=0, ramp_level=5, ramp_dir=None, meshgen=False, mesh=None, **kwargs):
         super(ArrayOptions, self).__init__()
         self.array_ids = np.array([[2, 5, 8, 11, 14],
                                    [3, 6, 9, 12, 15],
                                    [4, 7, 10, 13, 16]])
         self.farm_ids = tuple(self.array_ids.transpose().reshape((self.num_turbines, )))
         self.thrust_coefficient = 2.985
+        self.ramp_dir = ramp_dir
+        self.ramp_level = ramp_level
 
         # Domain and mesh
-        self.ramp = None
-        if mesh is None or ramp_dir is not None:
+        if mesh is None:
             self.mesh_file = os.path.join(self.resource_dir, f'channel_box_{level}.msh')
             if meshgen:
                 return
@@ -40,21 +41,7 @@ class ArrayOptions(FarmOptions):
                 self.mesh2d = Mesh(self.mesh_file)
             else:
                 raise IOError("Need to make mesh before initialising ArrayOptions object.")
-            if ramp_dir is not None:
-                ramp_file = os.path.join(ramp_dir, 'ramp')
-                if not os.path.exists(ramp_file + '.h5'):
-                    raise IOError(f"No ramp file found at {ramp_file}")
-                print_output(f"Using ramp file {ramp_file}.h5")
-                V_2d = MixedFunctionSpace([
-                    VectorFunctionSpace(self.mesh2d, "DG", 1, name="U_2d"),
-                    get_functionspace(self.mesh2d, "DG", 1, name="H_2d"),
-                ])
-                self.ramp = Function(V_2d)
-                uv, elev = self.ramp.split()
-                with DumbCheckpoint(ramp_file, mode=FILE_READ) as chk:
-                    chk.load(uv, name='uv_2d')
-                    chk.load(elev, name='elev_2d')
-        if mesh is not None:
+        else:
             self.mesh2d = mesh
 
         # Physics
@@ -94,6 +81,25 @@ class ArrayOptions(FarmOptions):
         # I/O
         self.fields_to_export = ['uv_2d', 'elev_2d']
         self.fields_to_export_hdf5 = []
+
+    @property
+    def ramp(self):
+        if self.ramp_dir is None:
+            return
+        ramp_mesh = Mesh(os.path.join(self.resource_dir, f'channel_box_{self.ramp_level}.msh'))
+        ramp_file = os.path.join(self.ramp_dir, 'ramp')
+        if not os.path.exists(ramp_file + '.h5'):
+            raise IOError(f"No ramp file found at {ramp_file}")
+        print_output(f"Using ramp file {ramp_file}.h5")
+        ramp = Function(MixedFunctionSpace([
+            VectorFunctionSpace(ramp_mesh, "DG", 1, name="U_2d"),
+            get_functionspace(ramp_mesh, "DG", 1, name="H_2d"),
+        ]))
+        uv, elev = ramp.split()
+        with DumbCheckpoint(ramp_file, mode=FILE_READ) as chk:
+            chk.load(uv, name='uv_2d')
+            chk.load(elev, name='elev_2d')
+        return ramp
 
     def rebuild_mesh_dependent_components(self, mesh, **kwargs):
         """
@@ -181,15 +187,15 @@ class ArrayOptions(FarmOptions):
         q = Function(solver_obj.function_spaces.V_2d)
         u, eta = q.split()
 
-        if self.ramp is not None:
-            u_ramp, eta_ramp = self.ramp.split()
-            u.project(u_ramp)
-            eta.project(eta_ramp)
-        else:
+        if self.ramp_dir is None:
             u.interpolate(as_vector([1e-8, 0.0]))
             x, y = SpatialCoordinate(self.mesh2d)
             X = 2*x/self.domain_length  # Non-dimensionalised x
             eta.interpolate(-self.max_amplitude*X)
+        else:
+            u_ramp, eta_ramp = self.ramp.split()
+            u.project(u_ramp)
+            eta.project(eta_ramp)
 
         solver_obj.assign_initial_conditions(uv=u, elev=eta)
 
@@ -199,7 +205,7 @@ class ArrayOptions(FarmOptions):
         """
         tc = Constant(0.0)
         hmax = Constant(self.max_amplitude)
-        ramped = self.ramp is not None
+        ramped = self.ramp_dir is not None
 
         def update_forcings(t):
             tc.assign(t + self.ramp_time if ramped else t)
