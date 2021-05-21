@@ -7,7 +7,10 @@ from options import ArrayOptions
 # Parse for refinement level
 parser = argparse.ArgumentParser()
 parser.add_argument("refinement_level", help="Number of refinements of farm region")
-level = int(parser.parse_args().refinement_level)
+parser.add_argument("-staggered", help="Consider the staggered array?")
+args = parser.parse_args()
+level = int(args.refinement_level)
+staggered = bool(args.staggered or False)
 
 # Boiler plate
 code = "//" + 80*"*" + """
@@ -18,15 +21,15 @@ code = "//" + 80*"*" + """
 # Domain and turbine specification
 op = ArrayOptions(meshgen=True)
 code += "// Domain and turbine specification\n"
-code += "L = {:.0f};\n".format(op.domain_length)
-code += "W = {:.0f};\n".format(op.domain_width)
-code += "D = {:.0f};\n".format(op.turbine_diameter)
-code += "d = {:.0f};\n".format(op.turbine_width)
+code += f"L = {op.domain_length:.0f};\n"
+code += f"W = {op.domain_width:.0f};\n"
+code += f"D = {op.turbine_diameter:.0f};\n"
+code += f"d = {op.turbine_width:.0f};\n"
 code += "deltax = 10*D;\ndeltay = 7.5*D;\n"
 code += "dx = 100;\n"
 dxfarm = [24, 12, 6, 5, 4, 3][level]
-code += "dxfarm = {:.1f};\n".format(dxfarm)
-code += "dxturbine = {:.1f};\n".format(min(dxfarm, 6))
+code += f"dxfarm = {dxfarm:.1f};\n"
+code += f"dxturbine = {min(dxfarm, 6):.1f};\n"
 
 # Channel geometry
 code += """
@@ -49,7 +52,7 @@ Line Loop(1) = {1, 2, 3, 4};
 signs = ([-1, 1, 1, -1], [-1, -1, 1, 1])
 
 # Code snippets
-point_str = "Point(%d) = {%d*d/2 + %d*deltax, %d*D/2 + %d*deltay, 0, dxturbine};\n"
+point_str = "Point(%d) = {%d*d/2 + %d*deltax, %d*D/2 + %f*deltay, 0, dxturbine};\n"
 line_str = "Line(%d) = {%d, %d};\n"
 loop_str = "Line Loop(%d) = {%d, %d, %d, %d};\n"
 
@@ -60,25 +63,31 @@ loop = 2
 for col in range(5):
     for row in range(3):
         tag = op.array_ids[row][col]
-        code += "\n// turbine %d\n" % (loop-1)
+        code += "\n// turbine %d\n" % (loop - 1)
         for s1, s2 in zip(*signs):
-            code += point_str % (point, s1, -2+col, s2, 1-row)
+            if staggered:
+                code += point_str % (point, s1, col - 2, s2, 1 - row + (-1)**col*0.25)
+            else:
+                code += point_str % (point, s1, col - 2, s2, 1 - row)
             point += 1
         for i in range(4):
-            code += line_str % (line+i, line+i, line+((i+1) % 4))
-        code += loop_str % (loop, line, line+1, line+2, line+3)
+            code += line_str % (line + i, line + i, line + ((i + 1) % 4))
+        code += loop_str % (loop, line, line + 1, line + 2, line + 3)
         line += 4
         loop += 1
 
 # Refined region around turbines
 code += "\n// Refined region around the turbines\n"
-point_str = "Point(%d) = {%d*3*deltax, %d*1.3*deltay, 0, dxfarm};\n"
+if staggered:
+    point_str = "Point(%d) = {%d*3*deltax, %d*1.55*deltay, 0, dxfarm};\n"
+else:
+    point_str = "Point(%d) = {%d*3*deltax, %d*1.3*deltay, 0, dxfarm};\n"
 for s1, s2 in zip(*signs):
     code += point_str % (point, s1, s2)
     point += 1
 for i in range(4):
-    code += line_str % (line+i, line+i, line+((i+1) % 4))
-code += loop_str % (loop, line, line+1, line+2, line+3)
+    code += line_str % (line + i, line + i, line + ((i + 1) % 4))
+code += loop_str % (loop, line, line + 1, line + 2, line + 3)
 line += 4
 
 # Surfaces
@@ -98,5 +107,9 @@ for surface in range(2, 17):
     code += surface_str % (surface, surface)
 
 # Write to file
-with open(os.path.join(op.resource_dir, "channel_box_{:d}.geo".format(level)), 'w+') as f:
+fname = f"channel_box_{level}"
+if staggered:
+    fname += "_staggered"
+fname += ".geo"
+with open(os.path.join(op.resource_dir, fname), 'w+') as f:
     f.write(code)

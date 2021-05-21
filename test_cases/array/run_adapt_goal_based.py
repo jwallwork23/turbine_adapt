@@ -31,6 +31,9 @@ parser.add_argument('-space_only', False)
 parser.add_argument('-approach', 'isotropic_dwr')
 parser.add_argument('-error_indicator', 'difference_quotient')
 parser.add_argument('-load_index', 0)
+parser.add_argument('-staggered', False, help="""
+    Toggle between aligned and staggered array
+    (default False).""")
 parsed_args = parser.parse_args()
 num_meshes = parsed_args.num_meshes
 if parsed_args.approach not in ('isotropic_dwr', 'anisotropic_dwr'):  # NOTE: anisotropic => weighted Hessian
@@ -43,7 +46,10 @@ turbine_hmax = Constant(parsed_args.turbine_h_max)
 
 # Mesh independent setup
 ramp_dir = os.path.join('outputs', 'fixed_mesh', f'level{parsed_args.ramp_level}')
-options = ArrayOptions(level=parsed_args.level, ramp_level=parsed_args.ramp_level, ramp_dir=ramp_dir)
+options = ArrayOptions(
+    level=parsed_args.level, staggered=parsed_args.staggered,
+    ramp_level=parsed_args.ramp_level, ramp_dir=ramp_dir,
+)
 end_time = parsed_args.num_tidal_cycles*options.tide_time
 root_dir = os.path.join(options.output_directory, approach)
 output_dir = os.path.join(root_dir, f'target{parsed_args.target:.0f}')

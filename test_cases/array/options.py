@@ -22,19 +22,24 @@ class ArrayOptions(FarmOptions):
     domain_length = PositiveFloat(3000.0).tag(config=False)
     domain_width = PositiveFloat(1000.0).tag(config=False)
 
-    def __init__(self, level=0, ramp_level=5, ramp_dir=None, meshgen=False, mesh=None, **kwargs):
+    def __init__(self, staggered=False, meshgen=False, mesh=None, **kwargs):
         super(ArrayOptions, self).__init__()
         self.array_ids = np.array([[2, 5, 8, 11, 14],
                                    [3, 6, 9, 12, 15],
                                    [4, 7, 10, 13, 16]])
         self.farm_ids = tuple(self.array_ids.transpose().reshape((self.num_turbines, )))
         self.thrust_coefficient = 2.985
-        self.ramp_dir = ramp_dir
-        self.ramp_level = ramp_level
+        self.ramp_dir = kwargs.get('ramp_dir')
+        self.ramp_level = kwargs.get('ramp_level', 0)
+        self.staggered = staggered
 
         # Domain and mesh
         if mesh is None:
-            self.mesh_file = os.path.join(self.resource_dir, f'channel_box_{level}.msh')
+            level = kwargs.get('level', 0)
+            fname = f"channel_box_{level}"
+            if staggered:
+                fname += "_staggered"
+            self.mesh_file = os.path.join(self.resource_dir, fname + '.msh')
             if meshgen:
                 return
             elif os.path.exists(self.mesh_file):
@@ -86,8 +91,13 @@ class ArrayOptions(FarmOptions):
     def ramp(self):
         if self.ramp_dir is None:
             return
-        ramp_mesh = Mesh(os.path.join(self.resource_dir, f'channel_box_{self.ramp_level}.msh'))
-        ramp_file = os.path.join(self.ramp_dir, 'ramp')
+        mesh_fname = f"channel_box_{self.ramp_level}"
+        fname = "ramp"
+        if self.staggered:
+            mesh_fname += "_staggered"
+            fname += "_staggered"
+        ramp_mesh = Mesh(os.path.join(self.resource_dir, mesh_fname + '.msh'))
+        ramp_file = os.path.join(self.ramp_dir, fname)
         if not os.path.exists(ramp_file + '.h5'):
             raise IOError(f"No ramp file found at {ramp_file}")
         print_output(f"Using ramp file {ramp_file}.h5")

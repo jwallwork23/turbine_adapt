@@ -14,8 +14,10 @@ dir:
 	@mkdir -p outputs/isotropic
 	@mkdir -p outputs/anisotropic
 
-mesh:
-	@echo "Generating Delauney meshes of turbine array domain..."
+mesh: aligned_mesh staggered_mesh
+
+aligned_mesh:
+	@echo "Generating Delauney meshes for aligned turbine array..."
 	@mkdir -p resources
 	@python3 meshgen.py 0
 	@cd resources && gmsh -2 channel_box_0.geo
@@ -29,6 +31,22 @@ mesh:
 	@cd resources && gmsh -2 channel_box_4.geo
 	@python3 meshgen.py 5
 	@cd resources && gmsh -2 channel_box_5.geo
+
+staggered_mesh:
+	@echo "Generating Delauney meshes for staggered turbine array..."
+	@mkdir -p resources
+	@python3 meshgen.py 0 -staggered 1
+	@cd resources && gmsh -2 channel_box_0_staggered.geo
+	@python3 meshgen.py 1 -staggered 1
+	@cd resources && gmsh -2 channel_box_1_staggered.geo
+	@python3 meshgen.py 2 -staggered 1
+	@cd resources && gmsh -2 channel_box_2_staggered.geo
+	@python3 meshgen.py 3 -staggered 1
+	@cd resources && gmsh -2 channel_box_3_staggered.geo
+	@python3 meshgen.py 4 -staggered 1
+	@cd resources && gmsh -2 channel_box_4_staggered.geo
+	@python3 meshgen.py 5 -staggered 1
+	@cd resources && gmsh -2 channel_box_5_staggered.geo
 
 
 # --- Runs
