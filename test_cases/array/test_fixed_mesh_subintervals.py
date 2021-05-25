@@ -1,6 +1,5 @@
 from turbine_adapt import *
 from firedrake_adjoint import Control
-from firedrake.adjoint.blocks import GenericSolveBlock, ProjectBlock
 import pyadjoint
 import itertools
 from options import ArrayOptions
@@ -108,18 +107,19 @@ def initial_condition(fs):
 
 def test_adjoint_same_mesh(plot=False):
     """
-    **Disclaimer: largely copied from pyroteus/test/test_adjoint.py
+    **Disclaimer: largely copied from
+        pyroteus/test/test_adjoint.py
     """
 
     # Setup
     print_output("\n--- Setting up\n")
-    J = 0
     fs = function_space
     dt = options.timestep
     dt_per_export = int(options.simulation_export_time/dt)
-    solves_per_dt = 1
     qoi = time_integrated_qoi
-    num_timesteps = int(end_time/dt)
+    time_partition = TimePartition(
+        end_time, 1, dt, timesteps_per_export=dt_per_export, solves_per_timestep=1,
+    )
 
     # Solve forward and adjoint without subinterval framework
     print_output("\n--- Solving the adjoint problem on 1 subinterval using pyadjoint\n")
@@ -127,27 +127,18 @@ def test_adjoint_same_mesh(plot=False):
     ic = initial_condition(fs)
     sol, J = solver(ic, 0.0, end_time, dt, **solver_kwargs)
     pyadjoint.compute_gradient(J, Control(ic))  # FIXME: gradient w.r.t. mixed function not correct
-    tape = pyadjoint.get_working_tape()
-    solve_blocks = [
-        block for block in tape.get_blocks()
-        if issubclass(block.__class__, GenericSolveBlock)
-        and not issubclass(block.__class__, ProjectBlock)
-        and block.adj_sol is not None
-    ][-num_timesteps*solves_per_dt::solves_per_dt]
-    _adj_sol = solve_blocks[0].adj_sol.copy(deepcopy=True)
+    _adj_sol = time_partition.solve_blocks()[0].adj_sol.copy(deepcopy=True)
     _J = J
 
     # Loop over having one or two subintervals
     for spaces in ([fs], [fs, fs]):
         N = len(spaces)
-        plural = '' if N == 1 else 's'
-        print_output(f"\n --- Solving the adjoint problem on {N} subinterval{plural} using pyroteus\n")
+        print_output(f"\n --- Solving the adjoint problem on {N} subinterval"
+                     + f"{'' if N == 1 else 's'} using pyroteus\n")
 
         # Solve forward and adjoint on each subinterval
-        J, solutions = solve_adjoint(
-            solver, initial_condition, qoi, spaces, end_time, dt,
-            timesteps_per_export=dt_per_export, solves_per_timestep=solves_per_dt,
-        )
+        time_partition = TimePartition(end_time, N, dt, timesteps_per_export=dt_per_export)
+        J, solutions = solve_adjoint(solver, initial_condition, qoi, spaces, time_partition)
 
         # Plot adjoint solutions
         if plot:
@@ -177,34 +168,24 @@ if __name__ == "__main__":
     """
     Solve over the subintervals in sequence
     """
-    # num_meshes = 5
-    num_meshes = 1
+    # num_subintervals = 5
+    num_subintervals = 1
     q = initial_condition(function_space)
     control = Control(q)  # FIXME: gradient w.r.t. mixed function not correct
     J = 0
     dt = options.timestep
-    dt_per_export = int(options.simulation_export_time/dt)
-    mesh_iteration_time = end_time/num_meshes
-    qoi = time_integrated_qoi
-    for i in range(num_meshes):
-        t_start = i*mesh_iteration_time
-        t_end = (i+1)*mesh_iteration_time
+    time_partition = TimePartition(
+        end_time, num_subintervals, dt,
+        timesteps_per_export=int(options.simulation_export_time/dt),
+    )
+    for i in range(num_subintervals):
         q, J = solver(
-            q, t_start, t_end, dt,
-            J=J, qoi=lambda *args: assemble(qoi(*args)),
-            no_exports=False,
+            q, *time_partition[i], J=J, no_exports=False,
+            qoi=lambda *args: assemble(time_integrated_qoi(*args)),
         )
     print_output(f"Energy output = {J/3600000} kW h")
     pyadjoint.compute_gradient(J, control)
-    tape = pyadjoint.get_working_tape()
-    num_timesteps = int(end_time/dt)
-    solves_per_dt = 1
-    solve_blocks = [
-        block for block in tape.get_blocks()
-        if issubclass(block.__class__, GenericSolveBlock)
-        and not issubclass(block.__class__, ProjectBlock)
-        and block.adj_sol is not None
-    ][-num_timesteps*solves_per_dt::solves_per_dt]
+    solve_blocks = time_partition.solve_blocks()
     outfile = File('outputs/fixed_mesh/Adjoint2d/Adjoint2d.pvd')
     z, zeta = Function(solve_blocks[0].function_space).split()
     z.rename("Adjoint velocity")

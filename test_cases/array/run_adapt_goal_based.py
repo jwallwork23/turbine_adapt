@@ -220,6 +220,7 @@ while fp_iteration <= maxiter:
                 metric_fname = os.path.join(output_dir, f'metric{i}_fp{fp_iteration}')
             if os.path.exists(metric_fname + '.h5'):
                 print_output(f"\n--- Loading metric data on mesh {i+1}\n")
+                print_output(metric_fname)
                 loaded = True
                 with DumbCheckpoint(metric_fname, mode=FILE_READ) as chk:
                     chk.load(metric, name="Metric")
@@ -231,20 +232,20 @@ while fp_iteration <= maxiter:
     if not loaded:
 
         # Solve forward and adjoint on each subinterval
-        args = (solver, initial_condition, time_integrated_qoi, spaces, end_time, dt)
+        time_partition = TimePartition(
+            end_time, len(spaces), dt, timesteps_per_export=dt_per_export
+        )
+        args = (solver, initial_condition, time_integrated_qoi, spaces, time_partition)
         if converged:
             with stop_annotating():
                 print_output("\n--- Final forward run\n")
                 J, checkpoints = get_checkpoints(
-                    *args, timesteps_per_export=dt_per_export,
-                    solver_kwargs=dict(no_exports=False, compute_power=True),
+                    *args, solver_kwargs=dict(no_exports=False, compute_power=True),
                 )
         else:
             print_output(f"\n--- Forward-adjoint sweep {fp_iteration}\n")
             J, solutions = solve_adjoint(
-                *args, timesteps_per_export=dt_per_export,
-                solves_per_timestep=solves_per_dt,
-                adjoint_projection=parsed_args.adjoint_projection,
+                *args, adjoint_projection=parsed_args.adjoint_projection,
             )
 
         # Check for QoI convergence
@@ -255,8 +256,7 @@ while fp_iteration <= maxiter:
                 with stop_annotating():
                     print_output("\n--- Final forward run\n")
                     J, checkpoints = get_checkpoints(
-                        *args, timesteps_per_export=dt_per_export,
-                        solver_kwargs=dict(no_exports=False, compute_power=True),
+                        *args, solver_kwargs=dict(no_exports=False, compute_power=True),
                     )
         J_old = J
 
@@ -413,7 +413,7 @@ while fp_iteration <= maxiter:
     # Save mesh data to disk
     if COMM_WORLD.size == 1:
         for i, mesh in enumerate(meshes):
-            mesh_fname = os.path.join(output_dir, f"mesh_fp{fp_iteration}_{i}")
+            mesh_fname = os.path.join(output_dir, f"mesh_fp{fp_iteration}_{i}.h5")
             viewer = PETSc.Viewer().createHDF5(mesh_fname, 'w')
             viewer(mesh.topology_dm)
 
