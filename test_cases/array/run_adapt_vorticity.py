@@ -161,7 +161,6 @@ for fp_iteration in range(args.maxiter + 1):
         metric_file = File(os.path.join(options.output_directory, 'unnormalised_metric.pvd'))
         for metric in metrics:
             metric.rename('Unnormalised metric')
-            metric_file._topology = None
             metric_file.write(metric)
         metric_file.close()
     space_time_normalise(metrics, end_time, timesteps, args.target, args.norm_order)
@@ -170,7 +169,6 @@ for fp_iteration in range(args.maxiter + 1):
         metric_file = File(os.path.join(options.output_directory, 'metric.pvd'))
         for metric in metrics:
             metric.rename('Normalised metric')
-            metric_file._topology = None
             metric_file.write(metric)
         metric_file.close()
 

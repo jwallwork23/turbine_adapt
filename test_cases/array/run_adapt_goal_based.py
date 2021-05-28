@@ -25,7 +25,6 @@ parser.add_argument('-target', 5000.0)
 parser.add_argument('-h_min', 0.01)
 parser.add_argument('-h_max', 100.0)
 parser.add_argument('-turbine_h_max', 10.0)
-parser.add_argument('-adjoint_projection', True)
 parser.add_argument('-flux_form', False)
 parser.add_argument('-space_only', False)
 parser.add_argument('-approach', 'isotropic_dwr')
@@ -179,7 +178,7 @@ J_old = None
 load_index = parsed_args.load_index
 fp_iteration = load_index
 while fp_iteration <= maxiter:
-    outfiles = {}
+    outfiles = AttrDict({})
     if fp_iteration < miniter:
         converged = False
     elif fp_iteration == maxiter:
@@ -233,7 +232,7 @@ while fp_iteration <= maxiter:
 
         # Solve forward and adjoint on each subinterval
         time_partition = TimePartition(
-            end_time, len(spaces), dt, timesteps_per_export=dt_per_export
+            end_time, len(spaces), dt, ['solution_2d'], timesteps_per_export=dt_per_export
         )
         args = (solver, initial_condition, time_integrated_qoi, spaces, time_partition)
         if converged:
@@ -244,9 +243,7 @@ while fp_iteration <= maxiter:
                 )
         else:
             print_output(f"\n--- Forward-adjoint sweep {fp_iteration}\n")
-            J, solutions = solve_adjoint(
-                *args, adjoint_projection=parsed_args.adjoint_projection,
-            )
+            J, solutions = solve_adjoint(*args)
 
         # Check for QoI convergence
         if J_old is not None:
@@ -267,10 +264,10 @@ while fp_iteration <= maxiter:
             break
 
         # Create vtu output files
-        outfiles['forward'] = File(os.path.join(output_dir, 'Forward2d.pvd'))
-        outfiles['forward_old'] = File(os.path.join(output_dir, 'ForwardOld2d.pvd'))
-        outfiles['adjoint_next'] = File(os.path.join(output_dir, 'AdjointNext2d.pvd'))
-        outfiles['adjoint'] = File(os.path.join(output_dir, 'Adjoint2d.pvd'))
+        outfiles.forward = File(os.path.join(output_dir, 'Forward2d.pvd'))
+        outfiles.forward_old = File(os.path.join(output_dir, 'ForwardOld2d.pvd'))
+        outfiles.adjoint_next = File(os.path.join(output_dir, 'AdjointNext2d.pvd'))
+        outfiles.adjoint = File(os.path.join(output_dir, 'Adjoint2d.pvd'))
         fields = ['forward', 'forward_old', 'adjoint_next', 'adjoint']
 
         # Construct metric
@@ -279,8 +276,6 @@ while fp_iteration <= maxiter:
         with stop_annotating():
             print_output(f"\n--- Error estimation {fp_iteration}\n")
             for i, mesh in enumerate(meshes):
-                for f in fields:
-                    outfiles[f]._topology = None  # Allow writing a different mesh
                 options.rebuild_mesh_dependent_components(mesh)
                 options.get_bnd_conditions(spaces[i])
                 update_forcings = options.update_forcings
@@ -294,7 +289,7 @@ while fp_iteration <= maxiter:
                 hessians_step = [] if approach == 'isotropic' else [Function(metrics[i]) for field in range(3)]
 
                 # Loop over all exported timesteps
-                N = len(solutions['adjoint'][i])
+                N = len(solutions.solution_2d.adjoint[i])
                 for j in range(N):
                     if i < num_meshes-1 and j == N-1:
                         continue
@@ -302,7 +297,7 @@ while fp_iteration <= maxiter:
                     # Plot fields
                     args = []
                     for f in fields:
-                        args.extend(solutions[f][i][j].split())
+                        args.extend(solutions.solution_2d[f][i][j].split())
                         args[-2].rename("Adjoint velocity" if 'adjoint' in f else "Velocity")
                         args[-1].rename("Adjoint elevation" if 'adjoint' in f else "Elevation")
                         outfiles[f].write(*args[-2:])
@@ -336,10 +331,9 @@ while fp_iteration <= maxiter:
 
             # Plot error indicators
             if approach == 'isotropic':
-                outfiles['error'] = File(os.path.join(output_dir, 'Indicator2d.pvd'))
+                outfiles.error = File(os.path.join(output_dir, 'Indicator2d.pvd'))
                 for error_indicator in error_indicators:
-                    outfiles['error']._topology = None
-                    outfiles['error'].write(error_indicator[0])
+                    outfiles.error.write(error_indicator[0])
 
             # Construct metrics
             for i, error_indicator in enumerate(error_indicators):
@@ -382,19 +376,17 @@ while fp_iteration <= maxiter:
     )
 
     # Plot metrics
-    outfiles['metric'] = File(os.path.join(output_dir, 'Metric2d.pvd'))
+    outfiles.metric = File(os.path.join(output_dir, 'Metric2d.pvd'))
     for metric in metrics:
         metric.rename("Metric")
-        outfiles['metric']._topology = None
-        outfiles['metric'].write(metric)
+        outfiles.metric.write(metric)
 
     # Adapt meshes
     print_output(f"\n--- Mesh adaptation {fp_iteration}\n")
-    outfiles['mesh'] = File(os.path.join(output_dir, 'Mesh2d.pvd'))
+    outfiles.mesh = File(os.path.join(output_dir, 'Mesh2d.pvd'))
     for i, metric in enumerate(metrics):
         meshes[i] = Mesh(adapt(meshes[i], metric).coordinates)
-        outfiles['mesh']._topology = None
-        outfiles['mesh'].write(meshes[i].coordinates)
+        outfiles.mesh.write(meshes[i].coordinates)
     num_cells = [mesh.num_cells() for mesh in meshes]
 
     # Check for convergence of element count

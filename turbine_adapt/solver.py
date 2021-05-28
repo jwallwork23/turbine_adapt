@@ -24,6 +24,7 @@ class FarmSolver(solver2d.FlowSolver2d):
 
         self.callbacks = thetis.callback.CallbackManager()
         self.fields = FieldDict()
+        self._field_preproc_funcs = {}
         self.function_spaces = AttrDict()
         self.fields.bathymetry_2d = options.bathymetry2d
 
