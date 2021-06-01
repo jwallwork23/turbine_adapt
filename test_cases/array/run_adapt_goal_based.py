@@ -60,8 +60,8 @@ target = parsed_args.target
 if not parsed_args.space_only:
     target *= end_time/dt  # space-time complexity
 timesteps = [dt]*num_meshes
-dt_per_export = int(options.simulation_export_time/dt)
-solves_per_dt = 1
+dt_per_export = [int(options.simulation_export_time/dt)]*num_meshes
+solves_per_dt = [1]*num_meshes
 
 # Initial mesh sequence
 meshes = [Mesh(options.mesh2d.coordinates) for i in range(num_meshes)]
@@ -72,7 +72,7 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
     Solve forward over time window
     (`t_start`, `t_end`) in P1DG-P1DG space.
     """
-    mesh = ic.function_space().mesh()
+    mesh = ic['solution_2d'].function_space().mesh()
     options.rebuild_mesh_dependent_components(mesh)
     options.simulation_end_time = t_end
     i_export = int(np.round(t_start/options.simulation_export_time))
@@ -104,7 +104,7 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
 
     # Set initial conditions for current mesh iteration
     solver_obj.create_exporters()
-    uv, elev = ic.split()
+    uv, elev = ic['solution_2d'].split()
     solver_obj.assign_initial_conditions(uv=uv, elev=elev)
     solver_obj.i_export = i_export
     solver_obj.next_export_t = i_export*options.simulation_export_time
@@ -124,33 +124,21 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
     def update_forcings(t):
         options.update_forcings(t)
         if qoi is not None:
-            options.J += qoi(solver_obj.fields.solution_2d, t, turbine_drag=_Ct)
+            options.J += qoi({'solution_2d': solver_obj.fields.solution_2d}, t, turbine_drag=_Ct)
 
     # Solve forward on current subinterval
     solver_obj.iterate(update_forcings=update_forcings, export_func=options.export_func)
-    return solver_obj.fields.solution_2d, options.J
+    return {'solution_2d': solver_obj.fields.solution_2d}, options.J
 
 
-def time_integrated_qoi(sol, t, turbine_drag=None):
-    """
-    Power output of the array at time `t`.
-
-    Integration in time gives the energy output.
-    """
-    assert turbine_drag is not None, \
-        "Turbine drag needs to be provided."
-    u, eta = sol.split()
-    unorm = sqrt(dot(u, u))
-    return turbine_drag*pow(unorm, 3)*dx
-
-
+@no_annotations
 def initial_condition(fs):
     """
     Near-zero initial velocity and an
     initial elevation which satisfies
     the boundary conditions.
     """
-    q = Function(fs)
+    q = Function(fs['solution_2d'][0])
     u, eta = q.split()
     if options.ramp is not None:
         print_output("Initialising with ramped hydrodynamics")
@@ -163,7 +151,20 @@ def initial_condition(fs):
         x, y = SpatialCoordinate(fs.mesh())
         X = 2*x/options.domain_length  # Non-dimensionalised x
         eta.interpolate(-options.max_amplitude*X)
-    return q
+    return {'solution_2d': q}
+
+
+def time_integrated_qoi(sol, t, turbine_drag=None):
+    """
+    Power output of the array at time `t`.
+
+    Integration in time gives the energy output.
+    """
+    assert turbine_drag is not None, \
+        "Turbine drag needs to be provided."
+    u, eta = sol['solution_2d'].split()
+    unorm = sqrt(dot(u, u))
+    return turbine_drag*pow(unorm, 3)*dx
 
 
 # Enter fixed point iteration
@@ -197,13 +198,15 @@ while fp_iteration <= maxiter:
             meshes[i] = Mesh(plex)
 
     # Create function spaces
-    spaces = [
-        MixedFunctionSpace([
-            VectorFunctionSpace(mesh, "DG", 1, name="U_2d"),
-            get_functionspace(mesh, "DG", 1, name="H_2d"),
-        ])
-        for mesh in meshes
-    ]
+    spaces = {
+        'solution_2d': [
+            MixedFunctionSpace([
+                VectorFunctionSpace(mesh, "DG", 1, name="U_2d"),
+                get_functionspace(mesh, "DG", 1, name="H_2d"),
+            ])
+            for mesh in meshes
+        ]
+    }
     metrics = [
         Function(TensorFunctionSpace(mesh, "CG", 1), name="Metric")
         for mesh in meshes
@@ -232,7 +235,8 @@ while fp_iteration <= maxiter:
 
         # Solve forward and adjoint on each subinterval
         time_partition = TimePartition(
-            end_time, len(spaces), dt, ['solution_2d'], timesteps_per_export=dt_per_export
+            end_time, len(spaces['solution_2d']), dt, ['solution_2d'],
+            timesteps_per_export=dt_per_export, debug=True,
         )
         args = (solver, initial_condition, time_integrated_qoi, spaces, time_partition)
         if converged:
@@ -277,16 +281,18 @@ while fp_iteration <= maxiter:
             print_output(f"\n--- Error estimation {fp_iteration}\n")
             for i, mesh in enumerate(meshes):
                 options.rebuild_mesh_dependent_components(mesh)
-                options.get_bnd_conditions(spaces[i])
+                options.get_bnd_conditions(spaces['solution_2d'][i])
                 update_forcings = options.update_forcings
 
                 # Create error estimator
                 ee = ErrorEstimator(options, mesh=mesh, error_estimator=parsed_args.error_indicator)
-                if approach == 'isotropic':
-                    error_indicators_step = [Function(ee.P0, name="Error indicator")]
-                else:
-                    error_indicators_step = [Function(ee.P0) for field in range(3)]
-                hessians_step = [] if approach == 'isotropic' else [Function(metrics[i]) for field in range(3)]
+                error_indicators_step = [
+                    Function(ee.P0)
+                    for field in range(1 if approach == 'isotropic' else 3)]
+                hessians_step = [
+                    Function(metrics[i])
+                    for field in range(0 if approach == 'isotropic' else 3)
+                ]
 
                 # Loop over all exported timesteps
                 N = len(solutions.solution_2d.adjoint[i])
@@ -305,7 +311,9 @@ while fp_iteration <= maxiter:
                     # Evaluate error indicator
                     update_forcings(i*end_time/num_meshes + dt*(j + 1))
                     if approach == 'isotropic':
-                        _error_indicators_step = [ee.error_indicator(*args, flux_form=parsed_args.flux_form)]
+                        _error_indicators_step = [
+                            ee.error_indicator(*args, flux_form=parsed_args.flux_form)
+                        ]
                         _hessians_step = []
                     else:
                         _error_indicators_step = ee.strong_residuals(*args[:4])
@@ -333,6 +341,7 @@ while fp_iteration <= maxiter:
             if approach == 'isotropic':
                 outfiles.error = File(os.path.join(output_dir, 'Indicator2d.pvd'))
                 for error_indicator in error_indicators:
+                    error_indicator[0].rename("Error indicator")
                     outfiles.error.write(error_indicator[0])
 
             # Construct metrics
