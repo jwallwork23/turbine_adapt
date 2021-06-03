@@ -63,7 +63,7 @@ class ArrayOptions(FarmOptions):
         self.max_mesh_reynolds_number = kwargs.get('max_mesh_reynolds_number', 1000.0)
         self.sponge_x = kwargs.get('sponge_x', 200.0)
         self.sponge_y = kwargs.get('sponge_y', 100.0)
-        self.horizontal_viscosity = self.set_viscosity(P1)
+        self.set_viscosity(P1)
 
         # Spatial discretisation
         self.use_lax_friedrichs_velocity = True
@@ -101,7 +101,7 @@ class ArrayOptions(FarmOptions):
         ramp_mesh = Mesh(os.path.join(self.resource_dir, mesh_fname + '.msh'))
         ramp_file = os.path.join(self.ramp_dir, fname)
         if not os.path.exists(ramp_file + '.h5'):
-            raise IOError(f"No ramp file found at {ramp_file}")
+            raise IOError(f"No ramp file found at {ramp_file}.h5")
         print_output(f"Using ramp file {ramp_file}.h5")
         ramp = Function(MixedFunctionSpace([
             VectorFunctionSpace(ramp_mesh, "DG", 1, name="U_2d"),
@@ -122,7 +122,7 @@ class ArrayOptions(FarmOptions):
         P1 = get_functionspace(mesh, "CG", 1)
         self.bathymetry2d = Function(P1, name='Bathymetry')
         self.bathymetry2d.assign(self.depth)
-        self.horizontal_viscosity = self.set_viscosity(P1)
+        self.set_viscosity(P1)
 
         self.timestep = 2.232
         if self.use_automatic_timestep:
@@ -134,7 +134,7 @@ class ArrayOptions(FarmOptions):
         Set the viscosity to be the :attr:`target_viscosity` in the tidal farm region and
         :attr:`base_viscosity` elsewhere.
         """
-        nu = Function(fs, name="Horizontal viscosity")
+        self.horizontal_viscosity = Function(fs, name="Horizontal viscosity")
 
         # Get box around tidal farm
         D = self.turbine_diameter
@@ -155,7 +155,7 @@ class ArrayOptions(FarmOptions):
         dist_r = sqrt(dist_x**2 + dist_y**2)
 
         # Define viscosity field with a sponge condition
-        nu.interpolate(
+        sekf.horizontal_viscosity.interpolate(
             conditional(
                 And(x > -delta_x, x < delta_x),
                 conditional(
@@ -172,11 +172,16 @@ class ArrayOptions(FarmOptions):
         )
 
         # Enforce maximum Reynolds number
-        Re_h, Re_h_min, Re_h_max = self.check_mesh_reynolds_number(nu)
+        Re_h, Re_h_min, Re_h_max = self.check_mesh_reynolds_number(self.horizontal_viscosity)
         if Re_h_max > self.max_mesh_reynolds_number:
-            nu_enforced = self.enforce_mesh_reynolds_number(nu)
-            nu.interpolate(conditional(Re_h > self.max_mesh_reynolds_number, nu_enforced, nu))
-        return nu
+            nu_enforced = self.enforce_mesh_reynolds_number(self.horizontal_viscosity)
+            self.horizontal_viscosity.interpolate(
+                conditional(
+                    Re_h > self.max_mesh_reynolds_number,
+                    nu_enforced,
+                    self.horizontal_viscosity,
+                )
+            )
 
     def get_bnd_conditions(self, V_2d):
         self.elev_in = Function(V_2d.sub(1))
@@ -202,11 +207,10 @@ class ArrayOptions(FarmOptions):
         forced boundary conditions. Otherwise, the spun-up
         solution field is loaded from file.
         """
-        q = Function(solver_obj.function_spaces.V_2d)
-        u, eta = q.split()
+        u, eta = Function(solver_obj.function_spaces.V_2d).split()
 
         if self.ramp_dir is None:
-            u.interpolate(as_vector([1e-8, 0.0]))
+            u.interpolate(as_vector([1.0e-08, 0.0]))
             x, y = SpatialCoordinate(self.mesh2d)
             X = 2*x/self.domain_length  # Non-dimensionalised x
             eta.interpolate(-self.max_amplitude*X)
@@ -221,6 +225,7 @@ class ArrayOptions(FarmOptions):
         """
         Simple tidal forcing with frequency :attr:`omega` and amplitude :attr:`max_amplitude`.
         """
+        assert hasattr(self, 'elev_in') and hasattr(self, 'elev_out'), "First apply boundary conditions"
         tc = Constant(0.0)
         hmax = Constant(self.max_amplitude)
         ramped = self.ramp_dir is not None
