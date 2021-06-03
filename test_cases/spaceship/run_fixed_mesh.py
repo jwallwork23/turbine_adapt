@@ -9,7 +9,7 @@ parsed_args = parser.parse_args()
 
 # Set parameters
 ramp_dir = os.path.join('outputs', 'fixed_mesh')
-options = ArrayOptions(ramp_dir=ramp_dir)
+options = SpaceshipOptions(ramp_dir=ramp_dir)
 options.simulation_end_time = parsed_args.num_tidal_cycles*24*3600.0
 options.create_tidal_farm()
 output_dir = os.path.join(options.output_directory, 'fixed_mesh')
