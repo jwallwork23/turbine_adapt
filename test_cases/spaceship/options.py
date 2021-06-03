@@ -167,6 +167,8 @@ class SpaceshipOptions(FarmOptions):
         solver_obj.bnd_functions['shallow_water'] = self.bnd_conditions
 
     def apply_initial_conditions(self, solver_obj):
+        if len(solver_obj.function_spaces.keys()) == 0:
+            solver_obj.create_function_spaces()
         u, eta = Function(solver_obj.function_spaces.V_2d).split()
 
         if self.ramp_dir is None:
