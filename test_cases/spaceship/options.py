@@ -87,7 +87,7 @@ class SpaceshipOptions(FarmOptions):
         element = ("DG", 1) if self.element_family == 'dg-dg' else ("CG", 2)
         ramp = Function(MixedFunctionSpace([
             VectorFunctionSpace(self.mesh2d, "DG", 1, name="U_2d"),
-            get_functionspace(self.mesh2d, element, name="H_2d"),
+            get_functionspace(self.mesh2d, *element, name="H_2d"),
         ]))
         uv, elev = ramp.split()
         with DumbCheckpoint(ramp_file, mode=FILE_READ) as chk:
@@ -161,6 +161,12 @@ class SpaceshipOptions(FarmOptions):
             msg = "Viscosity sponge type {:s} not recognised."
             raise ValueError(msg.format(self.viscosity_sponge_type))
         self.horizontal_viscosity.interpolate(max_value((x <= 0.0)*sponge, base_viscosity))
+
+    def get_bnd_conditions(self, V_2d):
+        self.bnd_conditions = {
+            1: {'un': Constant(0.0)},
+            2: {'elev': self.elev_in},
+        }
 
     def apply_boundary_conditions(self, solver_obj):
         self.elev_in = Constant(0.0)

@@ -1,7 +1,6 @@
 from turbine_adapt import *
 from turbine_adapt.error_estimation import ErrorEstimator
 from pyadjoint import stop_annotating
-import itertools
 from options import ArrayOptions
 
 
@@ -39,8 +38,6 @@ if parsed_args.approach not in ('isotropic_dwr', 'anisotropic_dwr'):  # NOTE: an
 if parsed_args.error_indicator != 'difference_quotient':
     raise NotImplementedError(f"Error indicator {parsed_args.error_indicator} not recognised.")
 approach = parsed_args.approach.split('_')[0]
-hmax = Constant(parsed_args.h_max)
-turbine_hmax = Constant(parsed_args.turbine_h_max)
 
 # Mesh independent setup
 ramp_dir = os.path.join('outputs', 'fixed_mesh', f'level{parsed_args.ramp_level}')
@@ -55,13 +52,6 @@ options.output_directory = create_directory(output_dir)
 Ct = options.quadratic_drag_coefficient
 ct = options.corrected_thrust_coefficient*Constant(pi/8)
 dt = options.timestep
-target = parsed_args.target
-timesteps = [dt]*num_meshes
-dt_per_export = [int(options.simulation_export_time/dt)]*num_meshes
-solves_per_dt = [1]*num_meshes
-
-# Initial mesh sequence
-meshes = [Mesh(options.mesh2d.coordinates) for i in range(num_meshes)]
 
 
 def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
@@ -78,20 +68,11 @@ def solver(ic, t_start, t_end, dt, J=0, qoi=None, **model_options):
     solver_obj = FarmSolver(options, mesh=mesh)
     options.apply_boundary_conditions(solver_obj)
     options.J = J
-    recover_vorticity = model_options.pop('recover_vorticity', False)
     compute_power = model_options.pop('compute_power', False)
     model_options.setdefault('no_exports', True)
     options.update(model_options)
     if not options.no_exports:
         options.fields_to_export = ['uv_2d', 'elev_2d']
-
-    # Callback which recovers vorticity
-    if recover_vorticity:
-        cb = PeakVorticityCallback(solver_obj)
-        cb._create_new_file = i_export == 0
-        solver_obj.add_callback(cb, 'timestep')
-        if i_export > 0:
-            cb._outfile.counter = itertools.count(start=i_export + 1)  # FIXME
 
     # Callback which writes power output to HDF5
     if compute_power:
@@ -163,6 +144,17 @@ def time_integrated_qoi(sol, t, turbine_drag=None):
     unorm = sqrt(dot(u, u))
     return turbine_drag*pow(unorm, 3)*dx
 
+
+# Collect parsed args
+hmax = Constant(parsed_args.h_max)
+turbine_hmax = Constant(parsed_args.turbine_h_max)
+target = parsed_args.target
+timesteps = [dt]*num_meshes
+dt_per_export = [int(options.simulation_export_time/dt)]*num_meshes
+solves_per_dt = [1]*num_meshes
+
+# Initial mesh sequence
+meshes = [Mesh(options.mesh2d.coordinates) for i in range(num_meshes)]
 
 # Enter fixed point iteration
 miniter = parsed_args.miniter

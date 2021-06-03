@@ -155,7 +155,7 @@ class ArrayOptions(FarmOptions):
         dist_r = sqrt(dist_x**2 + dist_y**2)
 
         # Define viscosity field with a sponge condition
-        sekf.horizontal_viscosity.interpolate(
+        self.horizontal_viscosity.interpolate(
             conditional(
                 And(x > -delta_x, x < delta_x),
                 conditional(
