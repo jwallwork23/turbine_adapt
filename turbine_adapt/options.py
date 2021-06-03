@@ -94,7 +94,7 @@ class FarmOptions(ModelOptions2d):
         if not self.correct_thrust:
             return c_T
         D = self.turbine_diameter
-        H = self.depth
+        H = self.get_depth('turbine')
         swept_area = pi*(D/2)**2
         cross_sectional_area = H*D
         correction = 4.0/(1.0 + np.sqrt(1.0 - c_T*swept_area/cross_sectional_area))**2
@@ -179,15 +179,38 @@ class FarmOptions(ModelOptions2d):
         _nu.interpolate(max_value(_nu, 0.0))
         return _nu
 
+    def get_depth(self, mode=None):
+        if mode is None:
+            assert hasattr(self, 'depth')
+            return self.depth
+        elif mode == 'turbine':
+            if hasattr(self, 'depth'):
+                return self.depth
+            elif hasattr(self, 'turbine_depth'):
+                return self.turbine_depth
+            elif hasattr(self, 'min_depth'):
+                return self.min_depth
+            elif hasattr(self, 'bathymetry2d'):
+                return self.bathymetry2d.vector().gather().min()
+            else:
+                raise ValueError("Cannot deduce maximum depth")
+        else:
+            assert mode == 'max', f"Unrecognised mode {mode}"
+            if hasattr(self, 'depth'):
+                return self.depth
+            elif hasattr(self, 'max_depth'):
+                return self.max_depth
+            elif hasattr(self, 'bathymetry2d'):
+                return self.bathymetry2d.vector().gather().max()
+            else:
+                raise ValueError("Cannot deduce maximum depth")
+
     @property
     def courant_number(self):
         """
         Compute the Courant number based on maximum depth and minimum element spacing.
         """
-        if hasattr(self, 'depth'):
-            H = self.depth
-        else:
-            H = self.bathymetry2d.vector().gather().max()
+        H = self.get_depth('max')
         celerity = np.sqrt(self.gravitational_acceleration*H)
         delta_x = self.mesh2d.delta_x.vector().gather().min()
         return celerity*self.timestep/delta_x

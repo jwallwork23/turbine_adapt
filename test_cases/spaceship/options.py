@@ -42,6 +42,7 @@ class SpaceshipOptions(FarmOptions):
 
         # Physics
         self.max_depth = 25.5
+        self.turbine_depth = 25.5
         P1 = get_functionspace(self.mesh2d, "CG", 1)
         self.quadratic_drag_coefficient = Constant(0.0025)
         self.set_bathymetry(P1)

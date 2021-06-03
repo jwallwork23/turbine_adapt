@@ -3,7 +3,7 @@ from options import SpaceshipOptions
 
 
 # Set parameters
-options = ArrayOptions()
+options = SpaceshipOptions()
 options.simulation_end_time = options.ramp_time
 options.create_tidal_farm()
 output_dir = os.path.join(options.output_directory, 'fixed_mesh')
