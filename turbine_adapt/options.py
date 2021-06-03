@@ -21,7 +21,7 @@ class FarmOptions(ModelOptions2d):
         Period of the M2 tidal constituent in
         seconds.
         """).tag(config=False)
-    gravitational_acceleration = PostiveFloat(9.81, help="""
+    gravitational_acceleration = PositiveFloat(9.81, help="""
         Gravitational acceleration in m s^{-2}.
         """).tag(config=False)
     thrust_coefficient = PositiveFloat(0.8, help="""

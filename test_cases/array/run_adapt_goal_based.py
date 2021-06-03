@@ -236,7 +236,7 @@ while fp_iteration <= maxiter:
         # Solve forward and adjoint on each subinterval
         time_partition = TimePartition(
             end_time, len(spaces['solution_2d']), dt, ['solution_2d'],
-            timesteps_per_export=dt_per_export, debug=True,
+            timesteps_per_export=dt_per_export, debug=False,
         )
         args = (solver, initial_condition, time_integrated_qoi, spaces, time_partition)
         if converged:
