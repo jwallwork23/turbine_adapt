@@ -70,10 +70,6 @@ class Parser(object):
             'load_metric': {'type': bool, 'msg': """
                 Toggle loading metric data from file (default {:b}).
                 """},
-            'adjoint_projection': {'type': bool, 'msg': """
-                Toggle whether to project adjoint solutions using conservative
-                interpolation operator or its adjoint (default {:b}).
-                """},
             'flux_form': {'type': bool, 'msg': """
                 Toggle whether to use the flux form of the difference quotient
                 error indicator (default {:b}).
