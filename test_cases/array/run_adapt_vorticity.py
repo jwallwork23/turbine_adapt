@@ -6,7 +6,7 @@ from options import ArrayOptions
 stop_annotating()
 
 # Parse arguments
-parser = Parser(prog='turbine/array/run_adapt_vorticity.py')
+parser = Parser(prog='test_cases/array/run_adapt_vorticity.py')
 parser.add_argument('-level', 0, help="""
     Mesh resolution level inside the refined region.
     Choose a value from [0, 1, 2, 3, 4] (default 0).""")

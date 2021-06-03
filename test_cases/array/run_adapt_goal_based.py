@@ -6,7 +6,7 @@ from options import ArrayOptions
 
 
 # Parse arguments
-parser = Parser(prog='turbine/array/run_goal_based.py')
+parser = Parser(prog='test_cases/array/run_goal_based.py')
 parser.add_argument('-level', 0, help="""
     Mesh resolution level inside the refined region.
     Choose a value from [0, 1, 2, 3, 4, 5] (default 0).""")

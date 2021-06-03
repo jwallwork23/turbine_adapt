@@ -1,12 +1,9 @@
-from turbine_adapt import *
-from pyadjoint import stop_annotating
+from turbine import *
 from options import ArrayOptions
 
 
-stop_annotating()
-
 # Parse arguments
-parser = Parser(prog='turbine/array/ramp.py')
+parser = Parser(prog='test_cases/array/ramp.py')
 parser.add_argument('-level', 0, help="""
     Mesh resolution level inside the refined region.
     Choose a value from [0, 1, 2, 3, 4, 5] (default 0).""")
