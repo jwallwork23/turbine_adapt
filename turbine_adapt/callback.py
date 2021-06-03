@@ -4,6 +4,7 @@ from turbine_adapt import *
 __all__ = ["PeakVorticityCallback", "PowerOutputCallback"]
 
 
+# TODO: No longer needed - drop from test cases
 class PeakVorticityCallback(DiagnosticCallback):
     """
     Computes the peak vorticities of the horizontal velocity field

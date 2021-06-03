@@ -21,6 +21,9 @@ class FarmOptions(ModelOptions2d):
         Period of the M2 tidal constituent in
         seconds.
         """).tag(config=False)
+    gravitational_acceleration = PostiveFloat(9.81, help="""
+        Gravitational acceleration in m s^{-2}.
+        """).tag(config=False)
     thrust_coefficient = PositiveFloat(0.8, help="""
         Uncorrected dimensionless drag associated
         with a turbine.
@@ -185,8 +188,6 @@ class FarmOptions(ModelOptions2d):
             H = self.depth
         else:
             H = self.bathymetry2d.vector().gather().max()
-        g = 9.81
-        celerity = np.sqrt(g*H)
+        celerity = np.sqrt(self.gravitational_acceleration*H)
         delta_x = self.mesh2d.delta_x.vector().gather().min()
-        c = celerity*self.timestep/delta_x
-        return c
+        return celerity*self.timestep/delta_x

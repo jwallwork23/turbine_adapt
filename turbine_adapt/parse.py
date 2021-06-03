@@ -85,6 +85,12 @@ class Parser(object):
         self._added = {}
 
     def add_argument(self, label, default, help=None):
+        """
+        :arg label: argument label, possibly prepended with '-'
+        :arg default: default value to assign
+        :kwarg help: optional help string, which should
+            be a format string which accepts the default
+        """
         tag = label[1:] if label[0] == '-' else label
         if help is not None:
             kwargs = dict(help=help)
@@ -98,6 +104,9 @@ class Parser(object):
         self._added[tag] = default
 
     def parse_args(self):
+        """
+        Parse arguments and return as an :class:`AttrDict`.
+        """
         from thetis.utility import AttrDict
         parsed = self._parser.parse_args()
         out = AttrDict()
