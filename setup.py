@@ -8,5 +8,5 @@ setup(
     author_email='j.wallwork16@imperial.ac.uk',
     url='https://github.com/jwallwork23/turbine_adapt',
     version='0.1',
-    packages=['turbine_adapt'],
+    packages=['turbine', 'turbine_adapt'],
 )
