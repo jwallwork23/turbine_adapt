@@ -68,6 +68,10 @@ class SpaceshipOptions(FarmOptions):
         self.timestepper_options.implicitness_theta = 1.0
         self.timestepper_options.use_semi_implicit_linearization = True
 
+        # Check discretisation validity
+        if self.timestepper_type == 'PressureProjectionPicard':
+            assert self.element_family == 'dg-cg'
+
         # I/O
         self.fields_to_export = ['uv_2d', 'elev_2d']
         self.fields_to_export_hdf5 = []

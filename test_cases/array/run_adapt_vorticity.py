@@ -99,7 +99,7 @@ for fp_iteration in range(args.maxiter + 1):
         cb = PowerOutputCallback(solver_obj)
         cb._create_new_file = i == 0
         solver_obj.add_callback(cb, 'timestep')
-        cb = PeakVorticityCallback(solver_obj, plot=converged)
+        cb = PeakVorticityCallback(solver_obj, plot=converged)  # TODO: Move to new format
         cb._create_new_file = i == 0
         solver_obj.add_callback(cb, 'timestep')
 

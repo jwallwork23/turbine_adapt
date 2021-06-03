@@ -26,7 +26,6 @@ parser.add_argument('-h_min', 0.01)
 parser.add_argument('-h_max', 100.0)
 parser.add_argument('-turbine_h_max', 10.0)
 parser.add_argument('-flux_form', False)
-parser.add_argument('-space_only', False)
 parser.add_argument('-approach', 'isotropic_dwr')
 parser.add_argument('-error_indicator', 'difference_quotient')
 parser.add_argument('-load_index', 0)
@@ -57,8 +56,6 @@ Ct = options.quadratic_drag_coefficient
 ct = options.corrected_thrust_coefficient*Constant(pi/8)
 dt = options.timestep
 target = parsed_args.target
-if not parsed_args.space_only:
-    target *= end_time/dt  # space-time complexity
 timesteps = [dt]*num_meshes
 dt_per_export = [int(options.simulation_export_time/dt)]*num_meshes
 solves_per_dt = [1]*num_meshes
@@ -272,7 +269,6 @@ while fp_iteration <= maxiter:
         outfiles.forward_old = File(os.path.join(output_dir, 'ForwardOld2d.pvd'))
         outfiles.adjoint_next = File(os.path.join(output_dir, 'AdjointNext2d.pvd'))
         outfiles.adjoint = File(os.path.join(output_dir, 'Adjoint2d.pvd'))
-        fields = ['forward', 'forward_old', 'adjoint_next', 'adjoint']
 
         # Construct metric
         error_indicators = []
@@ -302,7 +298,7 @@ while fp_iteration <= maxiter:
 
                     # Plot fields
                     args = []
-                    for f in fields:
+                    for f in outfiles:
                         args.extend(solutions.solution_2d[f][i][j].split())
                         args[-2].rename("Adjoint velocity" if 'adjoint' in f else "Velocity")
                         args[-1].rename("Adjoint elevation" if 'adjoint' in f else "Elevation")
@@ -362,13 +358,7 @@ while fp_iteration <= maxiter:
 
     # Process metrics
     print_output(f"\n--- Metric processing {fp_iteration}\n")
-    if parsed_args.space_only:
-        for metric in metrics:
-            space_normalise(metric, target, parsed_args.norm_order)
-    else:
-        metrics = space_time_normalise(
-            metrics, end_time, timesteps, target, parsed_args.norm_order
-        )
+    metrics = space_time_normalise(metrics, end_time, timesteps, target, parsed_args.norm_order)
 
     # Enforce element constraints, accounting for turbines
     h_max = []
