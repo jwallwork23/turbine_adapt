@@ -32,6 +32,8 @@ class ArrayOptions(FarmOptions):
         self.ramp_dir = kwargs.get('ramp_dir')
         self.ramp_level = kwargs.get('ramp_level', 0)
         self.staggered = staggered
+        self.use_automatic_timestep = kwargs.get('use_automatic_timestep', False)
+        self.max_courant_number = kwargs.get('max_courant_number', 10)
 
         # Domain and mesh
         if mesh is None:
@@ -71,9 +73,9 @@ class ArrayOptions(FarmOptions):
 
         # Temporal discretisation
         self.timestep = 2.232
-        while self.courant_number > 12:
-            self.timestep /= 2
-        print_output(f"Using timestep {self.timestep:.4f}s")
+        if self.use_automatic_timestep:
+            while self.courant_number > self.max_courant_number:
+                self.timestep /= 2
         self.tide_time = 0.1*self.M2_tide_period
         self.ramp_time = self.tide_time
         self.simulation_end_time = 2*self.tide_time
@@ -116,10 +118,16 @@ class ArrayOptions(FarmOptions):
         Rebuild all attributes which depend on :attr:`mesh2d`.
         """
         self.create_tidal_farm(mesh=mesh)
+
         P1 = get_functionspace(mesh, "CG", 1)
         self.bathymetry2d = Function(P1, name='Bathymetry')
         self.bathymetry2d.assign(self.depth)
         self.horizontal_viscosity = self.set_viscosity(P1)
+
+        self.timestep = 2.232
+        if self.use_automatic_timestep:
+            while self.courant_number > self.max_courant_number:
+                self.timestep /= 2
 
     def set_viscosity(self, fs):
         """
