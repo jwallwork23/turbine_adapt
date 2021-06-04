@@ -63,7 +63,6 @@ class SpaceshipOptions(FarmOptions):
         self.ramp_time = 20.4*3600.0
         self.simulation_end_time = 3*24*3600.0
         self.simulation_export_time = 300.0
-        # self.timestepper_type = 'CrankNicolson'
         self.timestepper_type = 'PressureProjectionPicard'
         self.timestepper_options.implicitness_theta = 1.0
         self.timestepper_options.use_semi_implicit_linearization = True
