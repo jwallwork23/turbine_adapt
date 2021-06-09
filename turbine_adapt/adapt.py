@@ -137,7 +137,7 @@ class GoalOrientedTidalFarm(object):
         approach = parsed_args.approach.split('_')[0]
         hmax = Constant(parsed_args.h_max)
         turbine_hmax = Constant(parsed_args.turbine_h_max)
-        target = parsed_args.target
+        target = end_time/dt*parsed_args.target  # Convert to space-time complexity
         num_meshes = parsed_args.num_meshes
         timesteps = [dt]*num_meshes
         dt_per_export = [int(options.simulation_export_time/dt)]*num_meshes
