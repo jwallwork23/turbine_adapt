@@ -38,6 +38,7 @@ class GoalOrientedTidalFarm(object):
             options.apply_boundary_conditions(solver_obj)
             options.J = J
             compute_power = model_options.pop('compute_power', False)
+            compute_vorticity = model_options.pop('compute_vorticity', False)
             model_options.setdefault('no_exports', True)
             options.update(model_options)
             if not options.no_exports:
@@ -48,6 +49,16 @@ class GoalOrientedTidalFarm(object):
                 cb = PowerOutputCallback(solver_obj)
                 cb._create_new_file = i_export == 0
                 solver_obj.add_callback(cb, 'timestep')
+
+            # Callback which writes vorticity to vtk
+            if compute_vorticity and not options.no_exports:
+                options.fields_to_export.append('vorticity_2d')
+                vorticity_2d = Function(solver_obj.function_spaces.P1_2d, name='vorticity_2d')
+                vorticity_calculator = VorticityCalculator2D(vorticity_2d, solver_obj)
+                solver_obj.add_new_field(
+                    vorticity_2d, 'vorticity_2d', 'Vorticity', 'Vorticity2d',
+                    unit='s-1', preproc_func=vorticity_calculator.solve,
+                )
 
             # Set initial conditions for current mesh iteration
             solver_obj.create_exporters()
