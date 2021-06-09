@@ -27,12 +27,18 @@ options = TwoTurbineOptions(**kwargs)
 options.create_tidal_farm()
 output_dir = os.path.join(options.output_directory, 'level{:d}'.format(args.level))
 options.output_directory = create_directory(output_dir)
+options.fields_to_export = ['uv_2d', 'elev_2d', 'vorticity_2d']
 
 # Setup solver
 solver_obj = FarmSolver(options)
 options.apply_boundary_conditions(solver_obj)
-for Callback in (PowerOutputCallback, PeakVorticityCallback):
-    solver_obj.add_callback(Callback(solver_obj), 'timestep')
+solver_obj.add_callback(PowerOutputCallback(solver_obj), 'timestep')
+vorticity_2d = Function(solver_obj.function_spaces.P1_2d, name='vorticity_2d')
+vorticity_calculator = VorticityCalculator2D(vorticity_2d, solver_obj)
+solver_obj.add_new_field(
+    vorticity_2d, 'vorticity_2d', 'Vorticity', 'Vorticity2d',
+    unit='s-1', preproc_func=vorticity_calculator.solve,
+)
 options.apply_initial_conditions(solver_obj)
 
 # Run

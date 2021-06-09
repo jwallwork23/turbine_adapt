@@ -95,13 +95,20 @@ for fp_iteration in range(args.maxiter + 1):
         solver_obj = FarmSolver(options)
         options.apply_boundary_conditions(solver_obj)
 
-        # Create callbacks, ensuring data from previous meshes are not overwritten
+        # Create power callback, ensuring data from previous meshes are not overwritten
         cb = PowerOutputCallback(solver_obj)
         cb._create_new_file = i == 0
         solver_obj.add_callback(cb, 'timestep')
-        cb = PeakVorticityCallback(solver_obj, plot=converged)  # TODO: Move to new format
-        cb._create_new_file = i == 0
-        solver_obj.add_callback(cb, 'timestep')
+
+        # Create vorticity calculator
+        if not options.no_exports:
+            options.fields_to_export.append('vorticity_2d')
+        vorticity_2d = Function(solver_obj.function_spaces.P1_2d, name='vorticity_2d')
+        vorticity_calculator = VorticityCalculator2D(vorticity_2d, solver_obj)
+        solver_obj.add_new_field(
+            vorticity_2d, 'vorticity_2d', 'Vorticity', 'Vorticity2d',
+            unit='s-1', preproc_func=vorticity_calculator.solve,
+        )
 
         # Set initial conditions for current mesh iteration, ensuring exports are not overwritten
         if i == 0:
@@ -129,14 +136,13 @@ for fp_iteration in range(args.maxiter + 1):
             """
             if converged:
                 return  # Do not accumulate on the final run
-            zeta = solver_obj.callbacks['timestep']['vorticity'].zeta
             t = solver_obj.simulation_time
             wq = export_time
             if np.isclose(t, start_time):
                 wq *= 0.5
             elif t > options.simulation_end_time - options.timestep - t_epsilon:
                 wq *= 0.5
-            metrics[i] += wq*isotropic_metric(zeta, target_space=metrics[i].function_space())
+            metrics[i] += wq*isotropic_metric(vorticity_2d, target_space=metrics[i].function_space())
 
         # Solve forward on current subinterval, extracting vorticity metrics
         solver_obj.iterate(update_forcings=options.update_forcings, export_func=export_func)
