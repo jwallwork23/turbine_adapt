@@ -10,5 +10,5 @@ This is research of the Applied Modelling and Computation Group
 #### For feedback, comments and questions, please email j.wallwork16@imperial.ac.uk.
 
 [Thetis]: https://thetisproject.org/ "Thetis"
-[Pyroteus]: https://github.com/jwallwork23/pyroteus "Pyroteus"
+[Pyroteus]: https://pyroteus.github.io/ "Pyroteus"
 [AMCG]: http://www.imperial.ac.uk/earth-science/research/research-groups/amcg/ "AMCG"
