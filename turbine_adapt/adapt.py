@@ -165,12 +165,13 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         else:
             raise NotImplementedError  # TODO: Consider different QoIs
 
-    def fixed_point_iteration(self, parsed_args):
+    def fixed_point_iteration(self, **parsed_args):
         """
         Apply a goal-oriented metric-based mesh adaptation
         fixed point iteration loop for a tidal farm
         modelling problem.
         """
+        parsed_args = AttrDict(parsed_args)
         options = self.options
         expected = {'miniter', 'maxiter', 'load_index', 'qoi_rtol', 'element_rtol',
                     'error_indicator', 'approach', 'h_min', 'h_max', 'turbine_h_max',
