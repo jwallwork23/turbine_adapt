@@ -35,5 +35,5 @@ root_dir = os.path.join(options.output_directory, approach)
 options.output_directory = create_directory(os.path.join(root_dir, f'target{parsed_args.target:.0f}'))
 
 # Run simulation
-tidal_farm = GoalOrientedTidalFarm(options, root_dir)
+tidal_farm = GoalOrientedTidalFarm(options, root_dir, parsed_args.num_meshes)
 tidal_farm.fixed_point_iteration(parsed_args)
