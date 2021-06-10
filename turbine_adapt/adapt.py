@@ -63,10 +63,11 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
     def get_solver(self):
         options = self.options
 
-        def solver(ic, t_start, t_end, dt, **model_options):
+        def solver(i, ic, **model_options):
             """
             Solve forward over time window (`t_start`, `t_end`).
             """
+            t_start, t_end, dt = self.time_partition[i]
             mesh = ic.solution_2d.function_space().mesh()
             options.rebuild_mesh_dependent_components(mesh)
             options.simulation_end_time = t_end
