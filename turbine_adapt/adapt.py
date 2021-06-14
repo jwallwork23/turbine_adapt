@@ -67,7 +67,8 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             """
             Solve forward over time window (`t_start`, `t_end`).
             """
-            t_start, t_end, dt = self.time_partition[i]
+            t_start, t_end = self.time_partition.subintervals[i]
+            dt = self.time_partition.timesteps[i]
             mesh = ic.solution_2d.function_space().mesh()
             options.rebuild_mesh_dependent_components(mesh)
             options.simulation_end_time = t_end
@@ -213,7 +214,9 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             if load_index > 0 and fp_iteration == load_index:
                 for i in range(num_subintervals):
                     mesh_fname = os.path.join(output_dir, f"mesh_fp{fp_iteration}_{i}")
-                    if not os.path.exists(mesh_fname + '.h5'):
+                    if os.path.exists(mesh_fname + '.h5'):
+                        print_output(f"\n--- Loading plex data for mesh {i+1}\n{mesh_fname}")
+                    else:
                         raise IOError(f"Cannot load mesh file {mesh_fname}.")
                     plex = PETSc.DMPlex().create()
                     plex.createFromFile(mesh_fname + '.h5')
@@ -234,11 +237,15 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                     else:
                         metric_fname = os.path.join(output_dir, f'metric{i}_fp{fp_iteration}')
                     if os.path.exists(metric_fname + '.h5'):
-                        print_output(f"\n--- Loading metric data on mesh {i+1}\n")
-                        print_output(metric_fname)
-                        loaded = True
-                        with DumbCheckpoint(metric_fname, mode=FILE_READ) as chk:
-                            chk.load(metric, name="Metric")
+                        print_output(f"\n--- Loading metric data on mesh {i+1}\n{metric_fname}")
+                        try:
+                            with DumbCheckpoint(metric_fname, mode=FILE_READ) as chk:
+                                chk.load(metric, name="Metric")
+                            loaded = True
+                        except Exception:
+                            print_output(f"Cannot load metric data on mesh {i+1}")
+                            loaded = False
+                            break
                     else:
                         assert not loaded, "Only partial metric data available"
                         break
@@ -272,7 +279,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 # Escape if converged
                 if converged:
                     print_output(f"Termination due to {converged_reason} after {fp_iteration+1}"
-                                 + f"iterations\nEnergy output: {self.J/3.6e+09} MWh")
+                                 + f" iterations\nEnergy output: {self.J/3.6e+09} MWh")
                     break
 
                 # Create vtu output files
