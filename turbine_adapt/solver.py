@@ -1,7 +1,7 @@
 from turbine_adapt import *
 
 
-class FarmSolver(solver2d.FlowSolver2d):
+class FarmSolver(FlowSolver2d):
     """
     Modified solver which accepts :class:`ModelOptions2d` objects
     with more attributes than expected.

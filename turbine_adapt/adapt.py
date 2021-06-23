@@ -1,6 +1,6 @@
 from turbine_adapt import *
 from turbine_adapt.error_estimation import ErrorEstimator
-from pyadjoint import stop_annotating
+import pyadjoint
 
 
 __all__ = ["GoalOrientedTidalFarm"]
@@ -19,14 +19,13 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         self.options = options
         self.root_dir = root_dir
         self.integrated_quantity = qoi
-        self.turbine_drag = None
 
         # Partition time interval
         dt = options.timestep
         dt_per_export = [int(options.simulation_export_time/dt)]*num_subintervals
         time_partition = TimePartition(
             options.simulation_end_time, num_subintervals,
-            dt, ['solution_2d'], timesteps_per_export=dt_per_export,
+            dt, ['swe2d'], timesteps_per_export=dt_per_export,
         )
 
         # Set initial meshes to default
@@ -53,7 +52,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         else:
             raise NotImplementedError
         return {
-            'solution_2d':
+            'swe2d':
                 MixedFunctionSpace([
                     VectorFunctionSpace(mesh, *uv, name="U_2d"),
                     get_functionspace(mesh, *elev, name="H_2d"),
@@ -68,8 +67,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             Solve forward over time window (`t_start`, `t_end`).
             """
             t_start, t_end = self.time_partition.subintervals[i]
-            dt = self.time_partition.timesteps[i]
-            mesh = ic.solution_2d.function_space().mesh()
+            mesh = ic.swe2d.function_space().mesh()
             options.rebuild_mesh_dependent_components(mesh)
             options.simulation_end_time = t_end
             i_export = int(np.round(t_start/options.simulation_export_time))
@@ -102,7 +100,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
             # Set initial conditions for current mesh iteration
             solver_obj.create_exporters()
-            uv, elev = ic.solution_2d.split()
+            uv, elev = ic.swe2d.split()
             solver_obj.assign_initial_conditions(uv=uv, elev=elev)
             solver_obj.i_export = i_export
             solver_obj.next_export_t = i_export*options.simulation_export_time
@@ -112,24 +110,16 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             if not options.no_exports:
                 solver_obj.exporters['vtk'].set_next_export_ix(i_export)
 
-            # Turbine parametrisation
-            P0 = get_functionspace(mesh, "DG", 0)
-            self.turbine_drag = Constant(options.quadratic_drag_coefficient)
-            ct = options.corrected_thrust_coefficient*Constant(pi/8)
-            for i, subdomain_id in enumerate(options.farm_ids):  # TODO: Use union
-                subset = mesh.cell_subset(subdomain_id)
-                self.turbine_drag = self.turbine_drag + interpolate(ct, P0, subset=subset)
-
             # Setup QoI
-            qoi = self.qoi
+            qoi = self.get_qoi(i)
 
             def update_forcings(t):
                 options.update_forcings(t)
-                self.J += qoi({'solution_2d': solver_obj.fields.solution_2d}, t)
+                self.J += qoi({'swe2d': solver_obj.fields.solution_2d}, t)
 
             # Solve forward on current subinterval
             solver_obj.iterate(update_forcings=update_forcings, export_func=options.export_func)
-            return AttrDict({'solution_2d': solver_obj.fields.solution_2d})
+            return AttrDict({'swe2d': solver_obj.fields.solution_2d})
 
         return solver
 
@@ -139,7 +129,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         initial elevation which satisfies
         the boundary conditions.
         """
-        q = Function(self.function_spaces.solution_2d[0])
+        q = Function(self.function_spaces.swe2d[0])
         u, eta = q.split()
         ramp = self.options.ramp
         assert ramp is not None
@@ -147,24 +137,33 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         u_ramp, eta_ramp = ramp.split()
         u.project(u_ramp)
         eta.project(eta_ramp)
-        return {'solution_2d': q}
+        return {'swe2d': q}
 
-    def get_qoi(self):
+    def get_qoi(self, i):
         """
         Currently supported QoIs:
 
         * 'energy' - energy output of tidal farm.
         """
-        assert self.turbine_drag is not None, "Turbine drag needs to be provided."
-
-        def energy_qoi(sol, t):
-            u, eta = sol['solution_2d'].split()
-            return self.turbine_drag*pow(sqrt(dot(u, u)), 3)*dx
-
         if self.integrated_quantity == 'energy':
-            return energy_qoi
+            P0 = get_functionspace(self[i], "DG", 0)
+            turbine_drag = Constant(self.options.quadratic_drag_coefficient)
+            ct = self.options.corrected_thrust_coefficient*Constant(pi/8)
+            for subdomain_id in self.options.farm_ids:  # TODO: Use union
+                subset = self[i].cell_subset(subdomain_id)
+                turbine_drag = turbine_drag + interpolate(ct, P0, subset=subset)
+
+            def qoi(sol, t):
+                u, eta = sol['swe2d'].split()
+                j = assemble(turbine_drag*pow(sqrt(dot(u, u)), 3)*dx)
+                if pyadjoint.tape.annotate_tape():
+                    j.block_variable.adj_value = 1.0
+                return j
+
         else:
             raise NotImplementedError  # TODO: Consider different QoIs
+
+        return qoi
 
     def fixed_point_iteration(self, **parsed_args):
         """
@@ -228,7 +227,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 for mesh in self.meshes
             ]
 
-            # Load metric data for first iteration if available
+            # Load metric data, if available
             loaded = False
             if fp_iteration == load_index:
                 for i, metric in enumerate(metrics):
@@ -255,10 +254,11 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
                 # Solve forward and adjoint on each subinterval
                 if converged:
-                    with stop_annotating():
+                    with pyadjoint.stop_annotating():
                         print_output("\n--- Final forward run\n")
                         self.get_checkpoints(
                             solver_kwargs=dict(no_exports=False, compute_power=True),
+                            run_final_subinterval=True,
                         )
                 else:
                     print_output(f"\n--- Forward-adjoint sweep {fp_iteration}\n")
@@ -269,10 +269,11 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                     if abs(self.J - J_old) < qoi_rtol*J_old and fp_iteration >= miniter:
                         converged = True
                         converged_reason = 'converged quantity of interest'
-                        with stop_annotating():
+                        with pyadjoint.stop_annotating():
                             print_output("\n--- Final forward run\n")
                             self.get_checkpoints(
                                 solver_kwargs=dict(no_exports=False, compute_power=True),
+                                run_final_subinterval=True,
                             )
                 J_old = self.J
 
@@ -291,11 +292,11 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 # Construct metric
                 error_indicators = []
                 hessians = []
-                with stop_annotating():
+                with pyadjoint.stop_annotating():
                     print_output(f"\n--- Error estimation {fp_iteration}\n")
                     for i, mesh in enumerate(self.meshes):
                         options.rebuild_mesh_dependent_components(mesh)
-                        options.get_bnd_conditions(self.function_spaces.solution_2d[i])
+                        options.get_bnd_conditions(self.function_spaces.swe2d[i])
                         update_forcings = options.update_forcings
 
                         # Create error estimator
@@ -309,7 +310,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                         ]
 
                         # Loop over all exported timesteps
-                        N = len(solutions.solution_2d.adjoint[i])
+                        N = len(solutions.swe2d.adjoint[i])
                         for j in range(N):
                             if i < num_subintervals-1 and j == N-1:
                                 continue
@@ -317,7 +318,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                             # Plot fields
                             args = []
                             for f in outfiles:
-                                args.extend(solutions.solution_2d[f][i][j].split())
+                                args.extend(solutions.swe2d[f][i][j].split())
                                 args[-2].rename("Adjoint velocity" if 'adjoint' in f else "Velocity")
                                 args[-1].rename("Adjoint elevation" if 'adjoint' in f else "Elevation")
                                 outfiles[f].write(*args[-2:])
@@ -422,7 +423,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             # Save mesh data to disk
             if COMM_WORLD.size == 1:
                 for i, mesh in enumerate(self.meshes):
-                    mesh_fname = os.path.join(output_dir, f"mesh_fp{fp_iteration}_{i}.h5")
+                    mesh_fname = os.path.join(output_dir, f"mesh_fp{fp_iteration+1}_{i}.h5")
                     viewer = PETSc.Viewer().createHDF5(mesh_fname, 'w')
                     viewer(mesh.topology_dm)
 

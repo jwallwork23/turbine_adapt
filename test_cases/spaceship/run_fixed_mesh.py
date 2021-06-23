@@ -1,5 +1,5 @@
 from turbine import *
-from options import ArrayOptions
+from options import SpaceshipOptions
 
 
 # Parse arguments

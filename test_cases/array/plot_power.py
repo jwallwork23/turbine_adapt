@@ -22,13 +22,16 @@ assert level in [0, 1, 2, 3, 4, 5]
 if approach == 'fixed_mesh':
     input_dir = 'level{:d}'.format(level)
     ext = '_level{:d}.pdf'.format(level)
+    # ext = '_level{:d}.png'.format(level)
 else:
     input_dir = 'target{:.0f}'.format(target)
     ext = '_target{:.0f}.pdf'.format(target)
+    # ext = '_target{:.0f}.png'.format(target)
 input_dir = os.path.join(os.path.dirname(__file__), 'outputs', approach, input_dir)
 with h5py.File(os.path.join(input_dir, 'diagnostic_turbine.hdf5'), 'r') as f:
     power = np.array(f['current_power'])
     time = np.array(f['time'])
+    # time = np.array(f['time']) + 4464.0
 time /= 4464.0
 if approach != 'fixed_mesh':
     time += 1.0
@@ -79,6 +82,7 @@ if not os.path.exists(fname):
 # Plot total power output
 fig, axes = plt.subplots()
 axes.plot(time, np.sum(power, axis=1)*1030.0/1.0e+06, label='Turbine {:d}'.format(i))
+# axes.plot(time, np.sum(power, axis=0)*1030.0/1.0e+06, label='Turbine {:d}'.format(i))
 axes.set_xlim([1, 1.5])
 axes.set_xticks([1, 1.125, 1.25, 1.375, 1.5])
 axes.set_xlabel(r'Time [$\mathrm s$]')

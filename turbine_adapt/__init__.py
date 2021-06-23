@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 import os                                      # noqa
 
-from thetis import *                           # noqa
+from pyroteus.thetis_compat import *           # noqa
 from pyroteus_adjoint import *                 # noqa
 
 from turbine_adapt.callback import *           # noqa
