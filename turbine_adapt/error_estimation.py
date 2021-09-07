@@ -22,8 +22,8 @@ class ErrorEstimator(object):
         self.n = FacetNormal(self.mesh)
 
         # Discretisation parameters
-        assert self.options.timestepper_type in ('CrankNicolson', 'SteadyState')
-        self.steady = self.options.timestepper_type == 'SteadyState'
+        assert self.options.swe_timestepper_type in ('CrankNicolson', 'SteadyState')
+        self.steady = self.options.swe_timestepper_type == 'SteadyState'
         self.theta = None if self.steady else self.options.timestepper_options.implicitness_theta
         self.eta_is_dg = self.options.element_family == 'dg-dg'
 

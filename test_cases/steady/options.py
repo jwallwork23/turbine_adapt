@@ -34,7 +34,7 @@ class SteadyTurbineOptions(FarmOptions):
         self.simulation_export_time = 20.0
         self.simulation_end_time = 18.0
         self.timestepper_type = 'SteadyState'
-        self.timestepper_options.solver_parameters = {
+        self.swe_timestepper_options.solver_parameters = {
             'mat_type': 'aij',
             'snes_type': 'newtonls',
             'snes_linesearch_type': 'bt',
