@@ -45,6 +45,14 @@ Line(11) = {11, 12};
 Line(12) = {12, 9};
 Line Loop(2) = {5, 6, 7, 8};  // inside loop 1
 Line Loop(3) = {9, 10, 11, 12};  // inside loop 2
+Physical Line(4) = {5};
+Physical Line(5) = {6};
+Physical Line(6) = {7};
+Physical Line(7) = {8};
+Physical Line(8) = {9};
+Physical Line(9) = {10};
+Physical Line(10) = {11};
+Physical Line(11) = {12};
 
 // Surfaces
 Plane Surface(1) = {1, 2, 3};
