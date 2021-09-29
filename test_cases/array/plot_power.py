@@ -1,3 +1,4 @@
+from thetis import create_directory
 from turbine_adapt.parse import Parser
 from turbine_adapt.plotting import *
 import h5py
@@ -6,33 +7,40 @@ import os
 
 
 # Parse arguments
-parser = Parser()
+parser = Parser(prog="test_cases/array/plot_power.py")
+parser.add_argument('configuration', 'aligned', help="""
+    Choose from 'aligned' and 'staggered'.
+    """)
 parser.add_argument('-level', 0, help="""
     Mesh resolution level inside the refined region.
-    Choose a value from [0, 1, 2, 3, 4] (default 0).""")
+    Choose a value from [0, 1, 2, 3, 4, 5] (default 0).""")
 parser.add_argument('-approach', 'fixed_mesh')
 parser.add_argument('-target', 10000)
 parsed_args = parser.parse_args()
+config = parsed_args.configuration
 approach = parsed_args.approach
 level = parsed_args.level
 target = parsed_args.target
+assert config in ['aligned', 'staggered']
 assert level in [0, 1, 2, 3, 4, 5]
 
-# Load data
+# Setup directories
 if approach == 'fixed_mesh':
-    input_dir = 'level{:d}'.format(level)
-    ext = '_level{:d}.pdf'.format(level)
+    run = f'level{level}'
 else:
-    input_dir = 'target{:.0f}'.format(target)
-    ext = '_target{:.0f}.pdf'.format(target)
-input_dir = os.path.join(os.path.dirname(__file__), 'outputs', approach, input_dir)
+    run = f'target{target:.0f}'
+input_dir = create_directory(os.path.join(os.path.dirname(__file__), 'outputs', config, approach, run))
+plot_dir = create_directory(os.path.join(os.path.dirname(__file__), 'plots', config, approach, run))
+
+
+# Load data
 with h5py.File(os.path.join(input_dir, 'diagnostic_turbine.hdf5'), 'r') as f:
     power = np.array(f['current_power'])
-    # time = np.array(f['time'])
-    time = np.array(f['time']) + 4464.0  # TODO: TEMP
+    time = np.array(f['time'])
+    time += 4464.0
 time /= 4464.0
-if approach != 'fixed_mesh':
-    time += 1.0
+# if approach != 'fixed_mesh':
+#     time += 1.0
 
 colours = ['black', 'dimgrey', 'grey', 'darkgrey', 'lightgrey']
 
@@ -40,7 +48,6 @@ colours = ['black', 'dimgrey', 'grey', 'darkgrey', 'lightgrey']
 fig, axes = plt.subplots()
 for i in range(15):
     _power = power[:, i]*1030.0/1.0e+06
-    # _power = power[i, :]*1030.0/1.0e+06
     axes.plot(time, _power, label=f"Turbine {i+1}", color=colours[i//3])
 axes.set_xlabel(r'Time/$T_{\mathrm{tide}}$')
 axes.set_xlim([1, 1.5])
@@ -48,14 +55,12 @@ axes.set_xticks([1, 1.125, 1.25, 1.375, 1.5])
 axes.set_ylabel(r'Power output [$\mathrm{MW}$]')
 axes.grid(True)
 plt.tight_layout()
-plot_dir = os.path.join(os.path.dirname(__file__), 'plots', approach)
-plt.savefig(os.path.join(plot_dir, 'power_output' + ext))
+plt.savefig(os.path.join(plot_dir, 'power_output.pdf'))
 
 # Plot power output of each column
 fig, axes = plt.subplots()
 for i in range(5):
     _power = power[:, 3*i] + power[:, 3*i+1] + power[:, 3*i+2]
-    # _power = power[3*i, :] + power[3*i+1, :] + power[3*i+2, :]
     axes.plot(time, _power*1030.0/1.0e+06, label=f"{i+1}", color=colours[i])
 axes.set_xlabel(r'Time/$T_{\mathrm{tide}}$')
 axes.set_ylabel(r'Power output [$\mathrm{MW}$]')
@@ -64,7 +69,7 @@ axes.set_xticks([1, 1.125, 1.25, 1.375, 1.5])
 axes.set_ylim([0, 15])
 axes.grid(True)
 plt.tight_layout()
-plt.savefig(os.path.join(plot_dir, 'power_output_column' + ext))
+plt.savefig(os.path.join(plot_dir, 'power_output_column.pdf'))
 
 # Plot legend separately
 fname = os.path.join(plot_dir, 'legend_column.pdf')
@@ -80,11 +85,10 @@ if not os.path.exists(fname):
 # Plot total power output
 fig, axes = plt.subplots()
 axes.plot(time, np.sum(power, axis=1)*1030.0/1.0e+06, label=f'Turbine {i}')
-# axes.plot(time, np.sum(power, axis=0)*1030.0/1.0e+06, label=f'Turbine {i}')
 axes.set_xlim([1, 1.5])
 axes.set_xticks([1, 1.125, 1.25, 1.375, 1.5])
 axes.set_xlabel(r'Time [$\mathrm s$]')
 axes.set_ylabel(r'Power output [$\mathrm{MW}$]')
 axes.grid(True)
 plt.tight_layout()
-plt.savefig(os.path.join(plot_dir, 'total_power_output' + ext))
+plt.savefig(os.path.join(plot_dir, 'total_power_output.pdf'))

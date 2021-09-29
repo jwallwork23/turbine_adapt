@@ -1,3 +1,4 @@
+from thetis import create_directory
 from turbine_adapt.parse import Parser
 from turbine_adapt.plotting import *
 import h5py
@@ -7,51 +8,73 @@ import os
 
 # Parse arguments
 parser = Parser()
-parser.add_argument('-approach', 'fixed_mesh')
-args = parser.parse_args()
+parser.add_argument('configuration', 'aligned', help="""
+    Choose from 'aligned' and 'staggered'.
+    """)
+parsed_args = parser.parse_args()
+config = parsed_args.configuration
+
+# Setup directories
+targets = 5000.0*2.0**np.array([0, 1, 2, 3, 4, 5])
+cwd = os.path.dirname(__file__)
+plot_dir = create_directory(os.path.join(cwd, 'plots', config))
 
 # Loop over runs
-fig, axes = plt.subplots()
-elements = [29860, 45334, 52162, 120548, 160222]  # TODO: avoid hard-code
-E = []
-x = []
-targets = [1250*400, 2500*400, 5000*400, 10000*400]
+approaches = ['fixed_mesh', 'isotropic']
+data = {
+    approach: {"E": [], "dofs": []}
+    for approach in approaches
+}
 for level, target in enumerate(targets):
+    for approach in approaches:
+        if approach == 'fixed_mesh':
+            run = f'level{level}'
+        else:
+            run = f'target{target:.0f}'
+        input_dir = os.path.join(cwd, 'outputs', config, approach, run)
 
-    # Load data
-    if args.approach == 'fixed_mesh':
-        input_dir = 'level{:d}'.format(level)
-    else:
-        input_dir = 'target{:.0f}'.format(target)
-    input_dir = os.path.join(os.path.dirname(__file__), 'outputs', args.approach, input_dir)
-    input_file = os.path.join(input_dir, 'diagnostic_turbine.hdf5')
-    if not os.path.exists(input_file):
-        print("Cannot load data for refinement level {:d}.".format(level))
-        continue
-    with h5py.File(input_file, 'r') as f:
-        power = np.array(f['current_power'])
-        time = np.array(f['time'])
-    assert len(power) == len(time)
-    power = power[len(power)//2:]
-    time = time[len(time)//2:]
-    total_power = np.sum(power, axis=1)*1030.0/1.0e+06/3600
+        # Read DoF count from log
+        logfile = os.path.join(input_dir, 'log')
+        if not os.path.exists(logfile):
+            print(f"Cannot load logfile {level} for {approach}.")
+            continue
+        dofs = 0
+        with open(logfile, 'r') as f:
+            f.readline()
+            f.readline()
+            f.readline()
+            f.readline()
+            dofs += int(f.readline().split()[-1])
+            dofs += int(f.readline().split()[-1])
+        data[approach]["dofs"].append(dofs)
 
-    # Compute energy output using trapezium rule on each timestep
-    energy = 0
-    for i in range(len(total_power)-1):
-        energy += 0.5*(time[i+1] - time[i])*(total_power[i+1] + total_power[i])
-    E.append(energy)
-    x.append(3*elements[level] if args.approach == 'fixed_mesh' else targets[level])
+        # Load data
+        input_file = os.path.join(input_dir, 'diagnostic_turbine.hdf5')
+        if not os.path.exists(input_file):
+            print(f"Cannot load dataset {level} for {approach}.")
+            continue
+        with h5py.File(input_file, 'r') as f:
+            power = np.array(f['current_power'])
+            time = np.array(f['time'])
+        assert len(power) == len(time)
+
+        # Compute total power
+        total_power = np.sum(power, axis=1)*1030.0/1.0e+06
+
+        # Compute energy output using trapezium rule on each timestep
+        energy = 0
+        for i in range(len(total_power)-1):
+            energy += 0.5*(time[i+1] - time[i])*(total_power[i+1] + total_power[i])
+        data[approach]["E"].append(energy/3600)
 
 # Plot
-fig, axes = plt.subplots(figsize=(6, 4))
-if args.approach == 'fixed_mesh':
-    axes.semilogx(x, E, '--x')
-else:
-    axes.plot(x, E, '--x')
-axes.set_xlabel(r'DoF count' if args.approach == 'fixed_mesh' else 'Target complexity')
+fig, axes = plt.subplots(figsize=(7, 6))
+for approach in approaches:
+    label = approach.capitalize().replace('_', ' ')
+    axes.semilogx(data[approach]["dofs"], data[approach]["E"], '--x', label=label)
+axes.set_xlabel(r'DoF count')
 axes.set_ylabel(r'Energy [$\mathrm{MW\,h}$]')
+axes.legend()
 axes.grid(True)
 plt.tight_layout()
-plot_dir = os.path.join(os.path.dirname(__file__), 'plots', args.approach)
 plt.savefig(os.path.join(plot_dir, 'energy_output.pdf'))

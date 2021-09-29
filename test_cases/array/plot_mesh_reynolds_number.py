@@ -1,27 +1,26 @@
 from turbine_adapt import *
 from turbine_adapt.plotting import *
 from options import ArrayOptions
-import argparse
 import os
 
 
 # Parse arguments
-parser = argparse.ArgumentParser()
-parser.add_argument("-max_mesh_reynolds_number", help="""
-    Maximum tolerated mesh Reynolds number (default 1000)""")
-parser.add_argument("-base_viscosity", help="""
-    Base viscosity (default 1)""")
-parser.add_argument("-target_viscosity", help="""
-    Target viscosity (default 0.01)""")
-args = parser.parse_args()
+parser = Parser(prog="test_cases/array/plot_mesh_reynolds_number.py")
+parser.add_argument('configuration', 'aligned', help="""
+    Choose from 'aligned' and 'staggered'.
+    """)
+parser.add_argument("-max_mesh_reynolds_number", 1000.0, help="""
+    Maximum tolerated mesh Reynolds number""")
+parser.add_argument("-base_viscosity", 1.0, help="""
+    Base viscosity""")
+parser.add_argument("-target_viscosity", 0.01, help="""
+    Target viscosity""")
+parsed_args = parser.parse_args()
+config = parsed_args.configuration
+assert config in ['aligned', 'staggered']
 
 # Set parameters
-kwargs = {
-    'base_viscosity': float(args.base_viscosity or 1.0),
-    'target_viscosity': float(args.target_viscosity or 0.01),
-    'max_mesh_reynolds_number': float(args.max_mesh_reynolds_number or 1000),
-}
-options = ArrayOptions(**kwargs)
+options = ArrayOptions(**parsed_args)
 
 # Plot viscosity
 nu = options.horizontal_viscosity
@@ -34,7 +33,7 @@ else:
     cbar = fig.colorbar(tc, ax=axes)
     cbar.set_label(r"(Kinematic) viscosity [$\mathrm m^2\,\mathrm s^{-1}$]")
     cbar.set_ticks(np.linspace(0, options.base_viscosity, 5))
-plot_dir = os.path.join(os.path.dirname(__file__), 'plots')
+plot_dir = os.path.join(os.path.dirname(__file__), 'plots', config)
 plt.savefig(os.path.join(plot_dir, 'viscosity.jpg'))
 
 # Plot mesh Reynolds number

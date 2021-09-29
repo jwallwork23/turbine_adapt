@@ -22,7 +22,7 @@ class ArrayOptions(FarmOptions):
     domain_length = PositiveFloat(3000.0).tag(config=False)
     domain_width = PositiveFloat(1000.0).tag(config=False)
 
-    def __init__(self, staggered=False, meshgen=False, mesh=None, **kwargs):
+    def __init__(self, configuration='aligned', meshgen=False, mesh=None, **kwargs):
         super(ArrayOptions, self).__init__()
         self.array_ids = np.array([[2, 5, 8, 11, 14],
                                    [3, 6, 9, 12, 15],
@@ -31,16 +31,14 @@ class ArrayOptions(FarmOptions):
         self.thrust_coefficient = 2.985
         self.ramp_dir = kwargs.get('ramp_dir')
         self.ramp_level = kwargs.get('ramp_level', 0)
-        self.staggered = staggered
+        self.configuration = configuration
         self.use_automatic_timestep = kwargs.get('use_automatic_timestep', False)
         self.max_courant_number = kwargs.get('max_courant_number', 10)
 
         # Domain and mesh
         if mesh is None:
             level = kwargs.get('level', 0)
-            fname = f"channel_box_{level}"
-            if staggered:
-                fname += "_staggered"
+            fname = f"channel_box_{level}_{configuration}"
             self.mesh_file = os.path.join(self.resource_dir, fname + '.msh')
             if meshgen:
                 return
@@ -93,13 +91,9 @@ class ArrayOptions(FarmOptions):
     def ramp(self):
         if self.ramp_dir is None:
             return
-        mesh_fname = f"channel_box_{self.ramp_level}"
-        fname = "ramp"
-        if self.staggered:
-            mesh_fname += "_staggered"
-            fname += "_staggered"
+        mesh_fname = f"channel_box_{self.ramp_level}_{self.configuration}"
         ramp_mesh = Mesh(os.path.join(self.resource_dir, mesh_fname + '.msh'))
-        ramp_file = os.path.join(self.ramp_dir, fname)
+        ramp_file = os.path.join(self.ramp_dir, "ramp")
         if not os.path.exists(ramp_file + '.h5'):
             raise IOError(f"No ramp file found at {ramp_file}.h5")
         print_output(f"Using ramp file {ramp_file}.h5")

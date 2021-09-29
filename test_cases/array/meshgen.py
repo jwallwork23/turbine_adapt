@@ -1,22 +1,26 @@
 from __future__ import absolute_import
-import argparse
+from turbine_adapt import Parser
 import os
 from options import ArrayOptions
 
 
 # Parse for refinement level
-parser = argparse.ArgumentParser()
-parser.add_argument("refinement_level", help="Number of refinements of farm region")
-parser.add_argument("-staggered", help="Consider the staggered array?")
-args = parser.parse_args()
-level = int(args.refinement_level)
-staggered = bool(args.staggered or False)
+parser = Parser(prog="test_cases/array/meshgen.py")
+parser.add_argument("refinement_level", 0, help="""
+    Number of refinements of farm region.""")
+parser.add_argument("configuration", "aligned", help="""
+    Choose from 'aligned' and 'staggered'.
+    """)
+parsed_args = parser.parse_args()
+level = int(parsed_args.refinement_level)
+config = parsed_args.configuration
+assert config in ['aligned', 'staggered']
 
 # Boiler plate
-code = "//" + 80*"*" + """
+code = "//" + 80*"*" + f"""
 // This geometry file was automatically generated using the `meshgen.py` script
-// with refinement level {:d}.
-""".format(level) + "//" + 80*"*" + "\n\n"
+// with refinement level {level:d}.
+""" + "//" + 80*"*" + "\n\n"
 
 # Domain and turbine specification
 op = ArrayOptions(meshgen=True)
@@ -65,10 +69,12 @@ for col in range(5):
         tag = op.array_ids[row][col]
         code += "\n// turbine %d\n" % (loop - 1)
         for s1, s2 in zip(*signs):
-            if staggered:
+            if config == "aligned":
+                code += point_str % (point, s1, col - 2, s2, 1 - row)
+            elif config == "staggered":
                 code += point_str % (point, s1, col - 2, s2, 1 - row + (-1)**col*0.25)
             else:
-                code += point_str % (point, s1, col - 2, s2, 1 - row)
+                raise NotImplementedError  # TODO
             point += 1
         for i in range(4):
             code += line_str % (line + i, line + i, line + ((i + 1) % 4))
@@ -78,10 +84,12 @@ for col in range(5):
 
 # Refined region around turbines
 code += "\n// Refined region around the turbines\n"
-if staggered:
+if config == "aligned":
+    point_str = "Point(%d) = {%d*3*deltax, %d*1.3*deltay, 0, dxfarm};\n"
+elif config == "staggered":
     point_str = "Point(%d) = {%d*3*deltax, %d*1.55*deltay, 0, dxfarm};\n"
 else:
-    point_str = "Point(%d) = {%d*3*deltax, %d*1.3*deltay, 0, dxfarm};\n"
+    raise NotImplementedError  # TODO
 for s1, s2 in zip(*signs):
     code += point_str % (point, s1, s2)
     point += 1
@@ -107,9 +115,5 @@ for surface in range(2, 17):
     code += surface_str % (surface, surface)
 
 # Write to file
-fname = f"channel_box_{level}"
-if staggered:
-    fname += "_staggered"
-fname += ".geo"
-with open(os.path.join(op.resource_dir, fname), 'w+') as f:
+with open(os.path.join(op.resource_dir, f"channel_box_{level}_{config}.geo"), 'w+') as f:
     f.write(code)
