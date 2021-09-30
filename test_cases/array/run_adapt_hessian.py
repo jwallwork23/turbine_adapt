@@ -25,7 +25,7 @@ if args.level != 0:
 # Set parameters
 options = ArrayOptions(level=args.level)
 options.create_tidal_farm()
-output_dir = os.path.join(options.output_directory, 'hessian', 'target{:.0f}'.format(args.target))
+output_dir = os.path.join(options.output_directory, 'hessian', f'target{args.target:.0f}')
 options.output_directory = create_directory(output_dir)
 end_time = args.end_time
 export_time = options.simulation_export_time
@@ -70,17 +70,16 @@ for fp_iteration in range(args.maxiter + 1):
                     meshes[i] = Mesh(plex)
                 with DumbCheckpoint(initial_metric.format(i, args.level), mode=FILE_READ) as chk:
                     chk.load(metrics[i], name="Metric")
-                print_output("Using stashed metric for iteration {:d}.".format(i))
+                print_output(f"Using stashed metric for iteration {i}.")
                 timesteps.append(options.timestep)
                 continue
             except Exception:
-                print_output("Cannot load stashed metric for iteration {:d}.".format(i))
+                print_output(f"Cannot load stashed metric for iteration {i}.")
                 if not os.path.exists(initial_metric.format(i, args.level) + '.h5'):
                     print_output("File does not exist.")
 
         # Re-initialise ArrayOptions object
-        msg = "\n Fixed point iteration {:2d}: subinterval {:3d} \n".format(fp_iteration, i)
-        print_output(43*'*' + msg + 43*'*')
+        print_output(43*'*' + "\n Fixed point iteration {fp_iteration:2d}: subinterval {i:3d} \n" + 43*'*')
         if not (fp_iteration == i == 0):
             options.__init__(mesh=mesh)
             options.create_tidal_farm()
@@ -153,7 +152,7 @@ for fp_iteration in range(args.maxiter + 1):
 
     # Escape if converged
     if converged:
-        print_output("Termination due to {:s}".format(converged_reason))
+        print_output(f"Termination due to {converged_reason}")
         break
 
     # Apply space-time normalisation
@@ -182,6 +181,6 @@ for fp_iteration in range(args.maxiter + 1):
         if np.abs(num_cells_i - num_cells_old_i) > args.element_rtol*num_cells_old_i:
             elements_converged = False
     if elements_converged:
-        print_output("Mesh element count converged to rtol {:.2e}".format(args.element_rtol))
+        print_output(f"Mesh element count converged to rtol {args.element_rtol:.2e}")
         converged = True
         converged_reason = 'converged element counts'
