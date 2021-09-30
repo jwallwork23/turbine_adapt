@@ -15,6 +15,7 @@ parsed_args = parser.parse_args()
 config = parsed_args.configuration
 
 # Setup directories
+columns = [0, 1, 2, 3, 4, 'overall']
 targets = 5000.0*2.0**np.array([0, 1, 2, 3, 4, 5])
 cwd = os.path.dirname(__file__)
 plot_dir = create_directory(os.path.join(cwd, 'plots', config))
@@ -22,7 +23,10 @@ plot_dir = create_directory(os.path.join(cwd, 'plots', config))
 # Loop over runs
 approaches = ['fixed_mesh', 'isotropic']
 data = {
-    approach: {"E": [], "dofs": []}
+    approach: {"E": {
+        column: []
+        for column in columns
+    }, "dofs": []}
     for approach in approaches
 }
 for level, target in enumerate(targets):
@@ -58,23 +62,28 @@ for level, target in enumerate(targets):
             time = np.array(f['time'])
         assert len(power) == len(time)
 
-        # Compute total power
-        total_power = np.sum(power, axis=1)*1030.0/1.0e+06
-
         # Compute energy output using trapezium rule on each timestep
-        energy = 0
-        for i in range(len(total_power)-1):
-            energy += 0.5*(time[i+1] - time[i])*(total_power[i+1] + total_power[i])
-        data[approach]["E"].append(energy/3600)
+        for column in columns:
+            if column == 'overall':
+                E = sum(data[approach]["E"][c][-1] for c in range(5))
+                data[approach]["E"][column].append(E)
+            else:
+                indices = [3*column, 3*column+1, 3*column+2]
+                total_power = np.sum(power[:, indices], axis=1)*1030.0/1.0e+06
+                energy = 0
+                for i in range(len(total_power)-1):
+                    energy += 0.5*(time[i+1] - time[i])*(total_power[i+1] + total_power[i])
+                data[approach]["E"][column].append(energy/3600)
 
 # Plot
-fig, axes = plt.subplots(figsize=(7, 6))
-for approach in approaches:
-    label = approach.capitalize().replace('_', ' ')
-    axes.semilogx(data[approach]["dofs"], data[approach]["E"], '--x', label=label)
-axes.set_xlabel(r'DoF count')
-axes.set_ylabel(r'Energy [$\mathrm{MW\,h}$]')
-axes.legend()
-axes.grid(True)
-plt.tight_layout()
-plt.savefig(os.path.join(plot_dir, 'energy_output.pdf'))
+for column in columns:
+    fig, axes = plt.subplots(figsize=(7, 6))
+    for approach in approaches:
+        label = approach.capitalize().replace('_', ' ')
+        axes.semilogx(data[approach]["dofs"], data[approach]["E"][column], '--x', label=label)
+    axes.set_xlabel(r'DoF count')
+    axes.set_ylabel(r'Energy [$\mathrm{MW\,h}$]')
+    axes.legend()
+    axes.grid(True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(plot_dir, f'energy_output_{column}.pdf'))
