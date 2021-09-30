@@ -9,15 +9,20 @@ class ErrorEstimator(object):
     Error estimation for shallow water tidal
     turbine modelling applications.
     """
-    def __init__(self, options, mesh=None, norm_type='L2', error_estimator='difference_quotient'):
+    def __init__(self, options, mesh=None, norm_type='L2', error_estimator='difference_quotient', metric='isotropic', boundary=True):
         """
         :args options: :class:`FarmOptions` parameter object.
+        :kwarg mesh: the mesh
+        :kwarg norm_type: norm type for error estimator
+        :kwarg error_estimator: error estimator type
+        :kwarg boundary: should boundary contributions be considered?
         """
         self.options = options
         self.mesh = mesh or options.mesh2d
         self.P0 = FunctionSpace(self.mesh, "DG", 0)
         self.p0test = TestFunction(self.P0)
         self.p0trial = TrialFunction(self.P0)
+        self.P1_ten = TensorFunctionSpace(self.mesh, "CG", 1)
         self.h = CellSize(self.mesh)
         self.n = FacetNormal(self.mesh)
 
@@ -37,9 +42,13 @@ class ErrorEstimator(object):
         # Error estimation parameters
         assert norm_type in ('L1', 'L2')
         self.norm_type = norm_type
-        self.error_estimator = error_estimator
-        if self.error_estimator != 'difference_quotient':
+        if error_estimator != 'difference_quotient':
             raise NotImplementedError  # TODO
+        self.error_estimator = error_estimator
+        if metric not in ['isotropic', 'weighted_hessian']:
+            raise NotImplementedError  # TODO
+        self.metric = metric
+        self.boundary = boundary
 
     def _Psi_u_steady(self, uv, elev):
         H = self.options.bathymetry2d + elev
@@ -138,46 +147,47 @@ class ErrorEstimator(object):
 
         # Boundary terms
         bnd_terms = 0
-        bnd_conditions = self.options.bnd_conditions
-        for bnd_marker in bnd_conditions:
-            funcs = bnd_conditions.get(bnd_marker)
-            ds_bnd = ds(int(bnd_marker))
-            eta_ext, uv_ext = self._get_bnd_functions(elev, uv, bnd_marker)
-            eta_ext_old, uv_ext_old = self._get_bnd_functions(elev_old, uv_old, bnd_marker)
+        if self.boundary:
+            bnd_conditions = self.options.bnd_conditions
+            for bnd_marker in bnd_conditions:
+                funcs = bnd_conditions.get(bnd_marker)
+                ds_bnd = ds(int(bnd_marker))
+                eta_ext, uv_ext = self._get_bnd_functions(elev, uv, bnd_marker)
+                eta_ext_old, uv_ext_old = self._get_bnd_functions(elev_old, uv_old, bnd_marker)
 
-            # External pressure gradient
-            un_jump = inner(uv - uv_ext, self.n)
-            if funcs is not None:
-                eta_rie = 0.5*(elev + eta_ext) + sqrt(H/g)*un_jump
-            elif self.eta_is_dg:
-                eta_rie = elev + sqrt(H/g)*un_jump
-            bnd_terms += -self.p0test*g*eta_rie*self.n[0]*ds_bnd
-            if not self.eta_is_dg:
-                bnd_terms += self.p0test*g*eta*self.n[0]*ds_bnd
+                # External pressure gradient
+                un_jump = inner(uv - uv_ext, self.n)
+                if funcs is not None:
+                    eta_rie = 0.5*(elev + eta_ext) + sqrt(H/g)*un_jump
+                elif self.eta_is_dg:
+                    eta_rie = elev + sqrt(H/g)*un_jump
+                bnd_terms += -self.p0test*g*eta_rie*self.n[0]*ds_bnd
+                if not self.eta_is_dg:
+                    bnd_terms += self.p0test*g*eta*self.n[0]*ds_bnd
 
-            # Advection
-            if funcs is not None:
-                eta_jump = elev_old - eta_ext_old
-                un_rie = 0.5*inner(uv_old + uv_ext_old, self.n) + sqrt(g/H_old)*eta_jump
-                bnd_terms += -self.p0test*un_rie*0.5*(uv_ext[0] + uv[0])*ds_bnd
-            elif self.options.use_lax_friedrichs_velocity:
-                gamma = 0.5*abs(dot(uv_old, self.n))*uv_lax_friedrichs
-                bnd_terms += -gamma*2*dot(uv, self.n)*self.n[0]
+                # Advection
+                if funcs is not None:
+                    eta_jump = elev_old - eta_ext_old
+                    un_rie = 0.5*inner(uv_old + uv_ext_old, self.n) + sqrt(g/H_old)*eta_jump
+                    bnd_terms += -self.p0test*un_rie*0.5*(uv_ext[0] + uv[0])*ds_bnd
+                elif self.options.use_lax_friedrichs_velocity:
+                    gamma = 0.5*abs(dot(uv_old, self.n))*uv_lax_friedrichs
+                    bnd_terms += -gamma*2*dot(uv, self.n)*self.n[0]
 
-            # Viscosity
-            if funcs is not None:
-                if 'un' in funcs:
-                    delta_uv = (dot(uv, self.n) - funcs['un'])*self.n[0]
-                else:
-                    if uv_ext is uv:
-                        continue
-                    delta_uv = (uv - uv_ext)[0]
-                if self.options.use_grad_div_viscosity_term:
-                    stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
-                else:
-                    stress_jump = nu*outer(outer(delta_uv, self.n))
-                bnd_terms += -self.p0test*sigma*nu*delta_uv*ds_bnd
-                # TODO: What about symmetrisation term?
+                # Viscosity
+                if funcs is not None:
+                    if 'un' in funcs:
+                        delta_uv = (dot(uv, self.n) - funcs['un'])*self.n[0]
+                    else:
+                        if uv_ext is uv:
+                            continue
+                        delta_uv = (uv - uv_ext)[0]
+                    if self.options.use_grad_div_viscosity_term:
+                        stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
+                    else:
+                        stress_jump = nu*outer(outer(delta_uv, self.n))
+                    bnd_terms += -self.p0test*sigma*nu*delta_uv*ds_bnd
+                    # TODO: What about symmetrisation term?
 
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
@@ -238,46 +248,47 @@ class ErrorEstimator(object):
 
         # Boundary terms
         bnd_terms = 0
-        bnd_conditions = self.options.bnd_conditions
-        for bnd_marker in bnd_conditions:
-            funcs = bnd_conditions.get(bnd_marker)
-            ds_bnd = ds(int(bnd_marker))
-            eta_ext, uv_ext = self._get_bnd_functions(elev, uv, bnd_marker)
-            eta_ext_old, uv_ext_old = self._get_bnd_functions(elev_old, uv_old, bnd_marker)
+        if self.boundary:
+            bnd_conditions = self.options.bnd_conditions
+            for bnd_marker in bnd_conditions:
+                funcs = bnd_conditions.get(bnd_marker)
+                ds_bnd = ds(int(bnd_marker))
+                eta_ext, uv_ext = self._get_bnd_functions(elev, uv, bnd_marker)
+                eta_ext_old, uv_ext_old = self._get_bnd_functions(elev_old, uv_old, bnd_marker)
 
-            # External pressure gradient
-            un_jump = inner(uv - uv_ext, self.n)
-            if funcs is not None:
-                eta_rie = 0.5*(elev + eta_ext) + sqrt(H/g)*un_jump
-            elif self.eta_is_dg:
-                eta_rie = elev + sqrt(H/g)*un_jump
-            bnd_terms += -self.p0test*g*eta_rie*self.n[1]*ds_bnd
-            if not self.eta_is_dg:
-                bnd_terms += self.p0test*g*eta*self.n[1]*ds_bnd
+                # External pressure gradient
+                un_jump = inner(uv - uv_ext, self.n)
+                if funcs is not None:
+                    eta_rie = 0.5*(elev + eta_ext) + sqrt(H/g)*un_jump
+                elif self.eta_is_dg:
+                    eta_rie = elev + sqrt(H/g)*un_jump
+                bnd_terms += -self.p0test*g*eta_rie*self.n[1]*ds_bnd
+                if not self.eta_is_dg:
+                    bnd_terms += self.p0test*g*eta*self.n[1]*ds_bnd
 
-            # Advection
-            if funcs is not None:
-                eta_jump = elev_old - eta_ext_old
-                un_rie = 0.5*inner(uv_old + uv_ext_old, self.n) + sqrt(g/H)*eta_jump
-                bnd_terms += -self.p0test*un_rie*0.5*(uv_ext[1] + uv[1])*ds_bnd
-            elif self.options.use_lax_friedrichs_velocity:
-                gamma = 0.5*abs(dot(uv_old, self.n))*uv_lax_friedrichs
-                bnd_terms += -gamma*2*dot(uv, self.n)*self.n[1]
+                # Advection
+                if funcs is not None:
+                    eta_jump = elev_old - eta_ext_old
+                    un_rie = 0.5*inner(uv_old + uv_ext_old, self.n) + sqrt(g/H)*eta_jump
+                    bnd_terms += -self.p0test*un_rie*0.5*(uv_ext[1] + uv[1])*ds_bnd
+                elif self.options.use_lax_friedrichs_velocity:
+                    gamma = 0.5*abs(dot(uv_old, self.n))*uv_lax_friedrichs
+                    bnd_terms += -gamma*2*dot(uv, self.n)*self.n[1]
 
-            # Viscosity
-            if funcs is not None:
-                if 'un' in funcs:
-                    delta_uv = (dot(uv, self.n) - funcs['un'])*self.n[1]
-                else:
-                    if uv_ext is uv:
-                        continue
-                    delta_uv = (uv - uv_ext)[1]
-                if self.options.use_grad_div_viscosity_term:
-                    stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
-                else:
-                    stress_jump = nu*outer(outer(delta_uv, self.n))
-                bnd_terms += -self.p0test*sigma*nu*delta_uv*ds_bnd
-                # TODO: What about symmetrisation term?
+                # Viscosity
+                if funcs is not None:
+                    if 'un' in funcs:
+                        delta_uv = (dot(uv, self.n) - funcs['un'])*self.n[1]
+                    else:
+                        if uv_ext is uv:
+                            continue
+                        delta_uv = (uv - uv_ext)[1]
+                    if self.options.use_grad_div_viscosity_term:
+                        stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
+                    else:
+                        stress_jump = nu*outer(outer(delta_uv, self.n))
+                    bnd_terms += -self.p0test*sigma*nu*delta_uv*ds_bnd
+                    # TODO: What about symmetrisation term?
 
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
@@ -311,20 +322,21 @@ class ErrorEstimator(object):
             un_rie = avg(dot(uv, self.n)) + sqrt(g/avg(H))*jump(elev*self.n, self.n)
             flux_terms += -avg(H)*un_rie
         bnd_terms = 0
-        bnd_conditions = self.options.bnd_conditions
-        for bnd_marker in bnd_conditions:
-            funcs = bnd_conditions.get(bnd_marker)
-            ds_bnd = ds(int(bnd_marker))
-            eta_ext, uv_ext = self._get_bnd_functions(elev, uv, bnd_marker)
-            eta_ext_old, uv_ext_old = self._get_bnd_functions(elev_old, uv_old, bnd_marker)
-            if funcs is not None:
-                h_av = 0.5*(H + eta_ext_old + b)
-                eta_jump = elev - eta_ext
-                un_rie = 0.5*inner(uv + uv_ext, self.n) + sqrt(g/h_av)*eta_jump
-                un_jump = inner(uv_old - uv_ext_old, self.n)
-                eta_rie = 0.5*(elev_old + eta_ext_old) + sqrt(h_av/g)*un_jump
-                h_rie = b + eta_rie
-                bnd_terms += -self.p0test*h_rie*un_rie*ds_bnd
+        if self.boundary:
+            bnd_conditions = self.options.bnd_conditions
+            for bnd_marker in bnd_conditions:
+                funcs = bnd_conditions.get(bnd_marker)
+                ds_bnd = ds(int(bnd_marker))
+                eta_ext, uv_ext = self._get_bnd_functions(elev, uv, bnd_marker)
+                eta_ext_old, uv_ext_old = self._get_bnd_functions(elev_old, uv_old, bnd_marker)
+                if funcs is not None:
+                    h_av = 0.5*(H + eta_ext_old + b)
+                    eta_jump = elev - eta_ext
+                    un_rie = 0.5*inner(uv + uv_ext, self.n) + sqrt(g/h_av)*eta_jump
+                    un_jump = inner(uv_old - uv_ext_old, self.n)
+                    eta_rie = 0.5*(elev_old + eta_ext_old) + sqrt(h_av/g)*un_jump
+                    h_rie = b + eta_rie
+                    bnd_terms += -self.p0test*h_rie*un_rie*ds_bnd
 
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
@@ -463,9 +475,9 @@ class ErrorEstimator(object):
         tuple `(uv, elev)`.
         """
         return [
-            recover_hessian(uv[0], mesh=self.mesh),
-            recover_hessian(uv[1], mesh=self.mesh),
-            recover_hessian(elev, mesh=self.mesh),
+            hessian_metric(recover_hessian(uv[0], mesh=self.mesh)),
+            hessian_metric(recover_hessian(uv[1], mesh=self.mesh)),
+            hessian_metric(recover_hessian(elev, mesh=self.mesh)),
         ]
 
     def difference_quotient(self, *args, flux_form=False):
@@ -493,8 +505,10 @@ class ErrorEstimator(object):
 
         # Combine the two
         dq = Function(self.P0, name="Difference quotient")
+        expr = 0
         for Psi_i, psi_i, R_i in zip(Psi, psi, R):
-            dq.project(dq + (Psi_i + psi_i/sqrt(self.h))*R_i)
+            expr += (Psi_i + psi_i/sqrt(self.h))*R_i
+        dq.project(expr)
         dq.interpolate(abs(dq))  # Ensure positivity
         return dq
 
@@ -502,5 +516,38 @@ class ErrorEstimator(object):
         if self.error_estimator == 'difference_quotient':
             flux_form = kwargs.get('flux_form', False)
             return self.difference_quotient(*args, flux_form=flux_form)
+        else:
+            raise NotImplementedError  # TODO
+
+    def metric(self, *args, **kwargs):
+        if self.metric == "isotropic":
+            return isotropic_metric(self.error_indicator(*args, **kwargs))
+        elif self.metric == "weighted_hessian":
+            flux_form = kwargs.get('flux_form', False)
+            nargs = len(args)
+            assert nargs == 4 if self.steady else 8
+
+            # Terms for standard a posteriori error estimate
+            Psi = self.strong_residuals(*args[:nargs//2])
+            psi = self.flux_terms(*args[:nargs//2])
+
+            # Weighting term for the adjoint
+            if flux_form:
+                raise ValueError("Flux form is incompatible with WH.")
+            else:
+                H = self.recover_hessians(*args[nargs//2:2+nargs//2])
+                if not self.steady:  # Average recovered Hessians
+                    for H_i, H_old_i in zip(H, self.recover_hessians(*args[-2:])):
+                        H_i += H_old_i
+                        H_i *= 0.5
+
+            # Combine the two
+            M = Function(self.P1_ten, name="Weighted Hessian metric")
+            expr = 0
+            for Psi_i, psi_i, H_i in zip(Psi, psi, H):
+                expr += (Psi_i + psi_i/sqrt(self.h))*H_i
+            M.project(expr)
+            M.assign(hessian_metric(M))
+            return M
         else:
             raise NotImplementedError  # TODO
