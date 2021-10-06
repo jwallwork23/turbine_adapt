@@ -192,12 +192,20 @@ class ErrorEstimator(object):
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
         ibp_terms = self._restrict(ibp_terms)*dS
+        flux_terms += ibp_terms
+        flux_terms += bnd_terms
         if self.norm_type == 'L1':
             flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS
         else:
             flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS
-        sp = {'ksp_type': 'preonly', 'pc_type': 'jacobi'}
-        solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
+        sp = {
+            "mat_type": "matfree",
+            "snes_type": "ksponly",
+            "ksp_type": "preonly",
+            "pc_type": "python",
+            "pc_python_type": "firedrake.MassInvPC",
+        }
+        solve(mass_term == flux_terms, psi, solver_parameters=sp)
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
@@ -293,12 +301,20 @@ class ErrorEstimator(object):
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
         ibp_terms = self._restrict(ibp_terms)*dS
+        flux_terms += ibp_terms
+        flux_terms += bnd_terms
         if self.norm_type == 'L1':
             flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS
         else:
             flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS
-        sp = {'ksp_type': 'preonly', 'pc_type': 'jacobi'}
-        solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
+        sp = {
+            "mat_type": "matfree",
+            "snes_type": "ksponly",
+            "ksp_type": "preonly",
+            "pc_type": "python",
+            "pc_python_type": "firedrake.MassInvPC",
+        }
+        solve(mass_term == flux_terms, psi, solver_parameters=sp)
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
@@ -341,6 +357,8 @@ class ErrorEstimator(object):
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
         ibp_terms = self._restrict(ibp_terms)*dS
+        flux_terms += ibp_terms
+        flux_terms += bnd_terms
         if self.norm_type == 'L1':
             flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS
         else:
@@ -352,7 +370,7 @@ class ErrorEstimator(object):
             "pc_type": "python",
             "pc_python_type": "firedrake.MassInvPC",
         }
-        solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
+        solve(mass_term == flux_terms, psi, solver_parameters=sp)
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
