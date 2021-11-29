@@ -146,7 +146,7 @@ class ErrorEstimator(object):
         flux_terms += dot(avg(stress), jump(self.n))[0]
 
         # Boundary terms
-        bnd_terms = 0
+        bnd_terms = {}
         if self.boundary:
             bnd_conditions = self.options.bnd_conditions
             for bnd_marker in bnd_conditions:
@@ -161,18 +161,18 @@ class ErrorEstimator(object):
                     eta_rie = 0.5*(elev + eta_ext) + sqrt(H/g)*un_jump
                 elif self.eta_is_dg:
                     eta_rie = elev + sqrt(H/g)*un_jump
-                bnd_terms += -self.p0test*g*eta_rie*self.n[0]*ds_bnd
+                bnd_terms[ds_bnd] = -g*eta_rie*self.n[0]
                 if not self.eta_is_dg:
-                    bnd_terms += self.p0test*g*eta*self.n[0]*ds_bnd
+                    bnd_terms[ds_bnd] += g*eta*self.n[0]
 
                 # Advection
                 if funcs is not None:
                     eta_jump = elev_old - eta_ext_old
                     un_rie = 0.5*inner(uv_old + uv_ext_old, self.n) + sqrt(g/H_old)*eta_jump
-                    bnd_terms += -self.p0test*un_rie*0.5*(uv_ext[0] + uv[0])*ds_bnd
+                    bnd_terms[ds_bnd] += -un_rie*0.5*(uv_ext[0] + uv[0])
                 elif self.options.use_lax_friedrichs_velocity:
                     gamma = 0.5*abs(dot(uv_old, self.n))*uv_lax_friedrichs
-                    bnd_terms += -gamma*2*dot(uv, self.n)*self.n[0]
+                    bnd_terms[ds_bnd] += -gamma*2*dot(uv, self.n)*self.n[0]
 
                 # Viscosity
                 if funcs is not None:
@@ -186,26 +186,25 @@ class ErrorEstimator(object):
                         stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
                     else:
                         stress_jump = nu*outer(outer(delta_uv, self.n))
-                    bnd_terms += -self.p0test*sigma*nu*delta_uv*ds_bnd
+                    bnd_terms[ds_bnd] += -sigma*nu*delta_uv
                     # TODO: What about symmetrisation term?
 
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
         ibp_terms = self._restrict(ibp_terms)*dS
-        flux_terms += ibp_terms
-        flux_terms += bnd_terms
         if self.norm_type == 'L1':
-            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS
+            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS(domain=self.mesh)
+            bnd_terms = sum(self.p0test*abs(term)*ds_bnd for ds_bnd, term in bnd_terms.items())
         else:
-            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS
+            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS(domain=self.mesh)
+            bnd_terms = sum(self.p0test*term*term*ds_bnd for ds_bnd, term in bnd_terms.items())
         sp = {
             "mat_type": "matfree",
             "snes_type": "ksponly",
             "ksp_type": "preonly",
-            "pc_type": "python",
-            "pc_python_type": "firedrake.MassInvPC",
+            "pc_type": "jacobi",
         }
-        solve(mass_term == flux_terms, psi, solver_parameters=sp)
+        solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
@@ -255,7 +254,7 @@ class ErrorEstimator(object):
         flux_terms += dot(avg(stress), jump(self.n))[1]
 
         # Boundary terms
-        bnd_terms = 0
+        bnd_terms = {}
         if self.boundary:
             bnd_conditions = self.options.bnd_conditions
             for bnd_marker in bnd_conditions:
@@ -270,18 +269,18 @@ class ErrorEstimator(object):
                     eta_rie = 0.5*(elev + eta_ext) + sqrt(H/g)*un_jump
                 elif self.eta_is_dg:
                     eta_rie = elev + sqrt(H/g)*un_jump
-                bnd_terms += -self.p0test*g*eta_rie*self.n[1]*ds_bnd
+                bnd_terms[ds_bnd] = -g*eta_rie*self.n[1]
                 if not self.eta_is_dg:
-                    bnd_terms += self.p0test*g*eta*self.n[1]*ds_bnd
+                    bnd_terms[ds_bnd] += g*eta*self.n[1]
 
                 # Advection
                 if funcs is not None:
                     eta_jump = elev_old - eta_ext_old
                     un_rie = 0.5*inner(uv_old + uv_ext_old, self.n) + sqrt(g/H)*eta_jump
-                    bnd_terms += -self.p0test*un_rie*0.5*(uv_ext[1] + uv[1])*ds_bnd
+                    bnd_terms[ds_bnd] += -un_rie*0.5*(uv_ext[1] + uv[1])
                 elif self.options.use_lax_friedrichs_velocity:
                     gamma = 0.5*abs(dot(uv_old, self.n))*uv_lax_friedrichs
-                    bnd_terms += -gamma*2*dot(uv, self.n)*self.n[1]
+                    bnd_terms[ds_bnd] += -gamma*2*dot(uv, self.n)*self.n[1]
 
                 # Viscosity
                 if funcs is not None:
@@ -295,26 +294,25 @@ class ErrorEstimator(object):
                         stress_jump = 2.0*nu*sym(outer(delta_uv, self.n))
                     else:
                         stress_jump = nu*outer(outer(delta_uv, self.n))
-                    bnd_terms += -self.p0test*sigma*nu*delta_uv*ds_bnd
+                    bnd_terms[ds_bnd] += -sigma*nu*delta_uv
                     # TODO: What about symmetrisation term?
 
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
         ibp_terms = self._restrict(ibp_terms)*dS
-        flux_terms += ibp_terms
-        flux_terms += bnd_terms
         if self.norm_type == 'L1':
-            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS
+            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS(domain=self.mesh)
+            bnd_terms = sum(self.p0test*abs(term)*ds_bnd for ds_bnd, term in bnd_terms.items())
         else:
-            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS
+            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS(domain=self.mesh)
+            bnd_terms = sum(self.p0test*term*term*ds_bnd for ds_bnd, term in bnd_terms.items())
         sp = {
             "mat_type": "matfree",
             "snes_type": "ksponly",
             "ksp_type": "preonly",
-            "pc_type": "python",
-            "pc_python_type": "firedrake.MassInvPC",
+            "pc_type": "jacobi",
         }
-        solve(mass_term == flux_terms, psi, solver_parameters=sp)
+        solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
@@ -337,7 +335,7 @@ class ErrorEstimator(object):
         if self.eta_is_dg:
             un_rie = avg(dot(uv, self.n)) + sqrt(g/avg(H))*jump(elev*self.n, self.n)
             flux_terms += -avg(H)*un_rie
-        bnd_terms = 0
+        bnd_terms = {}
         if self.boundary:
             bnd_conditions = self.options.bnd_conditions
             for bnd_marker in bnd_conditions:
@@ -352,25 +350,24 @@ class ErrorEstimator(object):
                     un_jump = inner(uv_old - uv_ext_old, self.n)
                     eta_rie = 0.5*(elev_old + eta_ext_old) + sqrt(h_av/g)*un_jump
                     h_rie = b + eta_rie
-                    bnd_terms += -self.p0test*h_rie*un_rie*ds_bnd
+                    bnd_terms[ds_bnd] = -h_rie*un_rie
 
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*dx
         ibp_terms = self._restrict(ibp_terms)*dS
-        flux_terms += ibp_terms
-        flux_terms += bnd_terms
         if self.norm_type == 'L1':
-            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS
+            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS(domain=self.mesh)
+            bnd_terms = sum(self.p0test*abs(term)*ds_bnd for ds_bnd, term in bnd_terms.items())
         else:
-            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS
+            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS(domain=self.mesh)
+            bnd_terms = sum(self.p0test*term*term*ds_bnd for ds_bnd, term in bnd_terms.items())
         sp = {
             "mat_type": "matfree",
             "snes_type": "ksponly",
             "ksp_type": "preonly",
-            "pc_type": "python",
-            "pc_python_type": "firedrake.MassInvPC",
+            "pc_type": "jacobi",
         }
-        solve(mass_term == flux_terms, psi, solver_parameters=sp)
+        solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
@@ -450,7 +447,6 @@ class ErrorEstimator(object):
         `'SteadyState'` then only the `uv` and
         `elev` arguments are used.
         """
-        # TODO: Account for boundary conditions
         if self.steady:
             return [
                 self._psi_u_steady(*args),
