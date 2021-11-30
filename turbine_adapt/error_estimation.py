@@ -19,12 +19,15 @@ class ErrorEstimator(object):
         """
         self.options = options
         self.mesh = mesh or options.mesh2d
-        self.P0 = FunctionSpace(self.mesh, "DG", 0)
+        self.P0 = FunctionSpace(self.mesh, 'DG', 0)
         self.p0test = TestFunction(self.P0)
         self.p0trial = TrialFunction(self.P0)
-        self.P1_ten = TensorFunctionSpace(self.mesh, "CG", 1)
+        self.P1_ten = TensorFunctionSpace(self.mesh, 'CG', 1)
         self.h = CellSize(self.mesh)
         self.n = FacetNormal(self.mesh)
+        self.dx = dx(domain=self.mesh)
+        self.dS = dS(domain=self.mesh)
+        self.ds = ds(domain=self.mesh)
 
         # Discretisation parameters
         assert self.options.swe_timestepper_type in ('CrankNicolson', 'SteadyState')
@@ -42,31 +45,27 @@ class ErrorEstimator(object):
         # Error estimation parameters
         assert norm_type in ('L1', 'L2')
         self.norm_type = norm_type
-        if error_estimator != 'difference_quotient':
-            raise NotImplementedError  # TODO
+        assert error_estimator in ('residual_flux', 'difference_quotient')
         self.error_estimator = error_estimator
         if metric not in ['isotropic', 'weighted_hessian']:
             raise NotImplementedError  # TODO
         self.metric = metric
         self.boundary = boundary
 
-    def _Psi_u_steady(self, uv, elev):
+    def _Psi_uv_steady(self, uv, elev):
         H = self.options.bathymetry2d + elev
         g = physical_constants['g_grav']
         nu = self.options.horizontal_viscosity
         Cd = self.drag_coefficient
         adv = dot(uv, nabla_grad(uv))
         vis = div(nu*grad(uv))
-        return adv[0] + g*elev.dx(0) + Cd*sqrt(inner(uv, uv))*uv[0]/H - vis[0]
+        return adv + g*grad(elev) + Cd*sqrt(inner(uv, uv))*uv/H - vis
+
+    def _Psi_u_steady(self, uv, elev):
+        return self._Psi_uv_steady(uv, elev)[0]
 
     def _Psi_v_steady(self, uv, elev):
-        H = self.options.bathymetry2d + elev
-        g = physical_constants['g_grav']
-        nu = self.options.horizontal_viscosity
-        Cd = self.drag_coefficient
-        adv = dot(uv, nabla_grad(uv))
-        vis = div(nu*grad(uv))
-        return adv[1] + g*elev.dx(1) + Cd*sqrt(inner(uv, uv))*uv[1]/H - vis[1]
+        return self._Psi_uv_steady(uv, elev)[1]
 
     def _Psi_eta_steady(self, uv, elev):
         H = self.options.bathymetry2d + elev
@@ -96,7 +95,7 @@ class ErrorEstimator(object):
             eta_ext = eta_in
             uv_ext = funcs['un']*self.n
         else:
-            raise Exception(f"Unsupported bnd type: {funcs.keys()}")
+            raise Exception(f'Unsupported bnd type: {funcs.keys()}')
         return eta_ext, uv_ext
 
     def _psi_u_steady(self, *args):
@@ -106,7 +105,7 @@ class ErrorEstimator(object):
         elif len(args) == 4:
             uv, elev, uv_old, elev_old = args
         else:
-            raise Exception(f"Expected two or four arguments, got {len(args)}.")
+            raise Exception(f'Expected two or four arguments, got {len(args)}.')
         psi = Function(self.P0)
         H = self.options.bathymetry2d + elev
         H_old = self.options.bathymetry2d + elev_old
@@ -151,7 +150,7 @@ class ErrorEstimator(object):
             bnd_conditions = self.options.bnd_conditions
             for bnd_marker in bnd_conditions:
                 funcs = bnd_conditions.get(bnd_marker)
-                ds_bnd = ds(int(bnd_marker))
+                ds_bnd = self.ds(int(bnd_marker))
                 eta_ext, uv_ext = self._get_bnd_functions(elev, uv, bnd_marker)
                 eta_ext_old, uv_ext_old = self._get_bnd_functions(elev_old, uv_old, bnd_marker)
 
@@ -190,19 +189,19 @@ class ErrorEstimator(object):
                     # TODO: What about symmetrisation term?
 
         # Compute flux norm
-        mass_term = self.p0test*self.p0trial*dx
-        ibp_terms = self._restrict(ibp_terms)*dS
+        mass_term = self.p0test*self.p0trial*self.dx
+        ibp_terms = self._restrict(ibp_terms)*self.dS
         if self.norm_type == 'L1':
-            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS(domain=self.mesh)
+            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*self.dS
             bnd_terms = sum(self.p0test*abs(term)*ds_bnd for ds_bnd, term in bnd_terms.items())
         else:
-            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS(domain=self.mesh)
+            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*self.dS
             bnd_terms = sum(self.p0test*term*term*ds_bnd for ds_bnd, term in bnd_terms.items())
         sp = {
-            "mat_type": "matfree",
-            "snes_type": "ksponly",
-            "ksp_type": "preonly",
-            "pc_type": "jacobi",
+            'mat_type': 'matfree',
+            'snes_type': 'ksponly',
+            'ksp_type': 'preonly',
+            'pc_type': 'jacobi',
         }
         solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
         psi.interpolate(abs(psi))
@@ -215,7 +214,7 @@ class ErrorEstimator(object):
         elif len(args) == 4:
             uv, elev, uv_old, elev_old = args
         else:
-            raise Exception(f"Expected two or four arguments, got {len(args)}.")
+            raise Exception(f'Expected two or four arguments, got {len(args)}.')
         psi = Function(self.P0)
         H = self.options.bathymetry2d + elev_old
         g = physical_constants['g_grav']
@@ -259,7 +258,7 @@ class ErrorEstimator(object):
             bnd_conditions = self.options.bnd_conditions
             for bnd_marker in bnd_conditions:
                 funcs = bnd_conditions.get(bnd_marker)
-                ds_bnd = ds(int(bnd_marker))
+                ds_bnd = self.ds(int(bnd_marker))
                 eta_ext, uv_ext = self._get_bnd_functions(elev, uv, bnd_marker)
                 eta_ext_old, uv_ext_old = self._get_bnd_functions(elev_old, uv_old, bnd_marker)
 
@@ -298,19 +297,19 @@ class ErrorEstimator(object):
                     # TODO: What about symmetrisation term?
 
         # Compute flux norm
-        mass_term = self.p0test*self.p0trial*dx
-        ibp_terms = self._restrict(ibp_terms)*dS
+        mass_term = self.p0test*self.p0trial*self.dx
+        ibp_terms = self._restrict(ibp_terms)*self.dS
         if self.norm_type == 'L1':
-            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS(domain=self.mesh)
+            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*self.dS
             bnd_terms = sum(self.p0test*abs(term)*ds_bnd for ds_bnd, term in bnd_terms.items())
         else:
-            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS(domain=self.mesh)
+            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*self.dS
             bnd_terms = sum(self.p0test*term*term*ds_bnd for ds_bnd, term in bnd_terms.items())
         sp = {
-            "mat_type": "matfree",
-            "snes_type": "ksponly",
-            "ksp_type": "preonly",
-            "pc_type": "jacobi",
+            'mat_type': 'matfree',
+            'snes_type': 'ksponly',
+            'ksp_type': 'preonly',
+            'pc_type': 'jacobi',
         }
         solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
         psi.interpolate(abs(psi))
@@ -323,7 +322,7 @@ class ErrorEstimator(object):
         elif len(args) == 4:
             uv, elev, uv_old, elev_old = args
         else:
-            raise Exception(f"Expected two or four arguments, got {len(args)}.")
+            raise Exception(f'Expected two or four arguments, got {len(args)}.')
         psi = Function(self.P0)
         b = self.options.bathymetry2d
         H = b + elev_old
@@ -340,7 +339,7 @@ class ErrorEstimator(object):
             bnd_conditions = self.options.bnd_conditions
             for bnd_marker in bnd_conditions:
                 funcs = bnd_conditions.get(bnd_marker)
-                ds_bnd = ds(int(bnd_marker))
+                ds_bnd = self.ds(int(bnd_marker))
                 eta_ext, uv_ext = self._get_bnd_functions(elev, uv, bnd_marker)
                 eta_ext_old, uv_ext_old = self._get_bnd_functions(elev_old, uv_old, bnd_marker)
                 if funcs is not None:
@@ -353,35 +352,35 @@ class ErrorEstimator(object):
                     bnd_terms[ds_bnd] = -h_rie*un_rie
 
         # Compute flux norm
-        mass_term = self.p0test*self.p0trial*dx
-        ibp_terms = self._restrict(ibp_terms)*dS
+        mass_term = self.p0test*self.p0trial*self.dx
+        ibp_terms = self._restrict(ibp_terms)*self.dS
         if self.norm_type == 'L1':
-            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*dS(domain=self.mesh)
+            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*self.dS
             bnd_terms = sum(self.p0test*abs(term)*ds_bnd for ds_bnd, term in bnd_terms.items())
         else:
-            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*dS(domain=self.mesh)
+            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*self.dS
             bnd_terms = sum(self.p0test*term*term*ds_bnd for ds_bnd, term in bnd_terms.items())
         sp = {
-            "mat_type": "matfree",
-            "snes_type": "ksponly",
-            "ksp_type": "preonly",
-            "pc_type": "jacobi",
+            'mat_type': 'matfree',
+            'snes_type': 'ksponly',
+            'ksp_type': 'preonly',
+            'pc_type': 'jacobi',
         }
         solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
-    def _Psi_u_unsteady(self, uv, elev, uv_old, elev_old):
-        f_time = (uv[0] - uv_old[0])/self.options.timestep
-        f = self._Psi_u_steady(uv, elev)
-        f_old = self._Psi_u_steady(uv_old, elev_old)
+    def _Psi_uv_unsteady(self, uv, elev, uv_old, elev_old):
+        f_time = (uv - uv_old)/self.options.timestep
+        f = self._Psi_uv_steady(uv, elev)
+        f_old = self._Psi_uv_steady(uv_old, elev_old)
         return f_time + self.theta*f + (1-self.theta)*f_old
 
-    def _Psi_v_unsteady(self, uv, elev, uv_old, elev_old):
-        f_time = (uv[1] - uv_old[1])/self.options.timestep
-        f = self._Psi_v_steady(uv, elev)
-        f_old = self._Psi_v_steady(uv_old, elev_old)
-        return f_time + self.theta*f + (1-self.theta)*f_old
+    def _Psi_u_unsteady(self, *args):
+        return self._Psi_uv_unsteady(*args)[0]
+
+    def _Psi_v_unsteady(self, *args):
+        return self._Psi_uv_unsteady(*args)[1]
 
     def _Psi_eta_unsteady(self, uv, elev, uv_old, elev_old):
         f_time = (elev - elev_old)/self.options.timestep
@@ -410,11 +409,8 @@ class ErrorEstimator(object):
         timestep, given current solution tuple
         `(uv, elev)` and lagged solution tuple
         `(uv_old, elev_old)`.
-
-        If :attr:`timestepper` is set to
-        `'SteadyState'` then only two `uv` and
-        `elev` arguments are used.
         """
+        assert len(args) == 2 if self.steady else 4
         if self.steady:
             Psi_u = self._Psi_u_steady(*args)
             Psi_v = self._Psi_v_steady(*args)
@@ -425,16 +421,34 @@ class ErrorEstimator(object):
             Psi_eta = self._Psi_eta_unsteady(*args)
         if self.norm_type == 'L1':
             return [
-                assemble(self.p0test*abs(Psi_u)*dx),
-                assemble(self.p0test*abs(Psi_v)*dx),
-                assemble(self.p0test*abs(Psi_eta)*dx),
+                assemble(self.p0test*abs(Psi_u)*self.dx),
+                assemble(self.p0test*abs(Psi_v)*self.dx),
+                assemble(self.p0test*abs(Psi_eta)*self.dx),
             ]
         else:
             return [
-                sqrt(abs(assemble(self.p0test*Psi_u*Psi_u*dx))),
-                sqrt(abs(assemble(self.p0test*Psi_v*Psi_v*dx))),
-                sqrt(abs(assemble(self.p0test*Psi_eta*Psi_eta*dx))),
+                sqrt(abs(assemble(self.p0test*Psi_u*Psi_u*self.dx))),
+                sqrt(abs(assemble(self.p0test*Psi_v*Psi_v*self.dx))),
+                sqrt(abs(assemble(self.p0test*Psi_eta*Psi_eta*self.dx))),
             ]
+
+    def weighted_residual(self, *args):
+        """
+        Evaluate the strong residual weighted by
+        the adjoint solution.
+        """
+        nargs = len(args)
+        assert nargs == 4 if self.steady else 8
+        if self.steady:
+            Psi_uv = self._Psi_uv_steady(*args[:nargs//2])
+            Psi_eta = self._Psi_eta_steady(*args[:nargs//2])
+        else:
+            Psi_uv = self._Psi_uv_unsteady(*args[:nargs//2])
+            Psi_eta = self._Psi_eta_unsteady(*args[:nargs//2])
+        uv_star = args[nargs//2]
+        elev_star = args[nargs//2+1]
+        wr = inner(Psi_uv, uv_star) + inner(Psi_eta, elev_star)
+        return assemble(self.p0test*abs(wr)*self.dx)
 
     def flux_terms(self, *args):
         """
@@ -465,9 +479,9 @@ class ErrorEstimator(object):
         Recover the Laplacian of solution
         tuple `(uv, elev)`.
         """
-        P1_vec = VectorFunctionSpace(self.mesh, "CG", 1)
+        P1_vec = VectorFunctionSpace(self.mesh, 'CG', 1)
         g, phi = TrialFunction(P1_vec), TestFunction(P1_vec)
-        a = inner(phi, g)*dx
+        a = inner(phi, g)*self.dx
         sp = {
             'ksp_type': 'gmres',
             'ksp_gmres_restart': 20,
@@ -476,7 +490,7 @@ class ErrorEstimator(object):
         }
         projections = [Function(P1_vec) for i in range(3)]
         for f, proj in zip((uv[0], uv[1], elev), projections):
-            L = f*dot(phi, self.n)*ds - div(phi)*f*dx
+            L = f*dot(phi, self.n)*self.ds - div(phi)*f*self.dx
             solve(a == L, proj, solver_parameters=sp)
         if self.norm_type == 'L1':
             return [interpolate(abs(div(proj)), self.P0) for proj in projections]
@@ -518,7 +532,7 @@ class ErrorEstimator(object):
                     R_i *= 0.5
 
         # Combine the two
-        dq = Function(self.P0, name="Difference quotient")
+        dq = Function(self.P0, name='Difference quotient')
         expr = 0
         for Psi_i, psi_i, R_i in zip(Psi, psi, R):
             expr += (Psi_i + psi_i/sqrt(self.h))*R_i
@@ -530,13 +544,16 @@ class ErrorEstimator(object):
         if self.error_estimator == 'difference_quotient':
             flux_form = kwargs.get('flux_form', False)
             return self.difference_quotient(*args, flux_form=flux_form)
-        else:
+        elif self.error_estimator == 'residual_flux':
+            residual = self.weighted_residual(*args)
             raise NotImplementedError  # TODO
+        else:
+            raise ValueError
 
     def metric(self, *args, **kwargs):
-        if self.metric == "isotropic":
+        if self.metric == 'isotropic':
             return isotropic_metric(self.error_indicator(*args, **kwargs))
-        elif self.metric == "weighted_hessian":
+        elif self.metric == 'weighted_hessian':
             flux_form = kwargs.get('flux_form', False)
             nargs = len(args)
             assert nargs == 4 if self.steady else 8
@@ -547,7 +564,7 @@ class ErrorEstimator(object):
 
             # Weighting term for the adjoint
             if flux_form:
-                raise ValueError("Flux form is incompatible with WH.")
+                raise ValueError('Flux form is incompatible with WH.')
             else:
                 H = self.recover_hessians(*args[nargs//2:2+nargs//2])
                 if not self.steady:  # Average recovered Hessians
@@ -556,7 +573,7 @@ class ErrorEstimator(object):
                         H_i *= 0.5
 
             # Combine the two
-            M = Function(self.P1_ten, name="Weighted Hessian metric")
+            M = Function(self.P1_ten, name='Weighted Hessian metric')
             expr = 0
             for Psi_i, psi_i, H_i in zip(Psi, psi, H):
                 expr += (Psi_i + psi_i/sqrt(self.h))*H_i
