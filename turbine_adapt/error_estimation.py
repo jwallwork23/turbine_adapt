@@ -72,7 +72,9 @@ class ErrorEstimator(object):
         return div(H*uv)
 
     def _restrict(self, v):
-        if self.norm_type == 'L1':
+        if self.error_estimator == 'residual_flux':
+            return jump(v, self.p0test)
+        elif self.norm_type == 'L1':
             return jump(abs(v), self.p0test)
         else:
             return jump(v*v, self.p0test)
@@ -99,13 +101,13 @@ class ErrorEstimator(object):
         return eta_ext, uv_ext
 
     def _psi_u_steady(self, *args):
-        if len(args) == 2:
-            uv, elev = args
+        if self.steady:
+            assert len(args) == 4
+            uv, elev, uv_star, elev_star = args
             uv_old, elev_old = uv, elev
-        elif len(args) == 4:
-            uv, elev, uv_old, elev_old = args
         else:
-            raise Exception(f'Expected two or four arguments, got {len(args)}.')
+            assert len(args) == 6
+            uv, elev, uv_old, elev_old, uv_star, elev_star = args
         psi = Function(self.P0)
         H = self.options.bathymetry2d + elev
         H_old = self.options.bathymetry2d + elev_old
@@ -191,12 +193,12 @@ class ErrorEstimator(object):
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*self.dx
         ibp_terms = self._restrict(ibp_terms)*self.dS
-        if self.norm_type == 'L1':
-            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*self.dS
-            bnd_terms = sum(self.p0test*abs(term)*ds_bnd for ds_bnd, term in bnd_terms.items())
+        if self.error_estimator == 'residual_flux':
+            flux_terms = inner(flux_terms, self._restrict(uv_star[0]))*self.dS
+            bnd_terms = sum([self._restrict(inner(term, uv_star[0]))*ds_bnd for ds_bnd, term in bnd_terms.items()])
         else:
-            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*self.dS
-            bnd_terms = sum(self.p0test*term*term*ds_bnd for ds_bnd, term in bnd_terms.items())
+            flux_terms = self._restrict(flux_terms)*self.dS
+            bnd_terms = sum([self._restrict(term)*ds_bnd for ds_bnd, term in bnd_terms.items()])
         sp = {
             'mat_type': 'matfree',
             'snes_type': 'ksponly',
@@ -204,17 +206,19 @@ class ErrorEstimator(object):
             'pc_type': 'jacobi',
         }
         solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
+        if self.error_estimator == 'residual_flux':
+            return psi
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
     def _psi_v_steady(self, *args):
-        if len(args) == 2:
-            uv, elev = args
+        if self.steady:
+            assert len(args) == 4
+            uv, elev, uv_star, elev_star = args
             uv_old, elev_old = uv, elev
-        elif len(args) == 4:
-            uv, elev, uv_old, elev_old = args
         else:
-            raise Exception(f'Expected two or four arguments, got {len(args)}.')
+            assert len(args) == 6
+            uv, elev, uv_old, elev_old, uv_star, elev_star
         psi = Function(self.P0)
         H = self.options.bathymetry2d + elev_old
         g = physical_constants['g_grav']
@@ -299,12 +303,12 @@ class ErrorEstimator(object):
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*self.dx
         ibp_terms = self._restrict(ibp_terms)*self.dS
-        if self.norm_type == 'L1':
-            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*self.dS
-            bnd_terms = sum(self.p0test*abs(term)*ds_bnd for ds_bnd, term in bnd_terms.items())
+        if self.error_estimator == 'residual_flux':
+            flux_terms = inner(flux_terms, self._restrict(uv_star[1]))*self.dS
+            bnd_terms = sum([self._restrict(inner(term, uv_star[1]))*ds_bnd for ds_bnd, term in bnd_terms.items()])
         else:
-            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*self.dS
-            bnd_terms = sum(self.p0test*term*term*ds_bnd for ds_bnd, term in bnd_terms.items())
+            flux_terms = self._restrict(flux_terms)*self.dS
+            bnd_terms = sum([self._restrict(term)*ds_bnd for ds_bnd, term in bnd_terms.items()])
         sp = {
             'mat_type': 'matfree',
             'snes_type': 'ksponly',
@@ -312,17 +316,19 @@ class ErrorEstimator(object):
             'pc_type': 'jacobi',
         }
         solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
+        if self.error_estimator == 'residual_flux':
+            return psi
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
     def _psi_eta_steady(self, *args):
-        if len(args) == 2:
-            uv, elev = args
+        if self.steady:
+            assert len(args) == 4
+            uv, elev, uv_star, elev_star = args
             uv_old, elev_old = uv, elev
-        elif len(args) == 4:
-            uv, elev, uv_old, elev_old = args
         else:
-            raise Exception(f'Expected two or four arguments, got {len(args)}.')
+            assert len(args) == 6
+            uv, elev, uv_old, elev_old, uv_star, elev_star = args
         psi = Function(self.P0)
         b = self.options.bathymetry2d
         H = b + elev_old
@@ -354,12 +360,12 @@ class ErrorEstimator(object):
         # Compute flux norm
         mass_term = self.p0test*self.p0trial*self.dx
         ibp_terms = self._restrict(ibp_terms)*self.dS
-        if self.norm_type == 'L1':
-            flux_terms = 2*avg(self.p0test)*abs(flux_terms)*self.dS
-            bnd_terms = sum(self.p0test*abs(term)*ds_bnd for ds_bnd, term in bnd_terms.items())
+        if self.error_estimator == 'residual_flux':
+            flux_terms = inner(flux_terms, self._restrict(elev_star))*self.dS
+            bnd_terms = sum([self._restrict(inner(term, elev_star))*ds_bnd for ds_bnd, term in bnd_terms.items()])
         else:
-            flux_terms = 2*avg(self.p0test)*flux_terms*flux_terms*self.dS
-            bnd_terms = sum(self.p0test*term*term*ds_bnd for ds_bnd, term in bnd_terms.items())
+            flux_terms = self._restrict(flux_terms)*self.dS
+            bnd_terms = sum([self._restrict(term)*ds_bnd for ds_bnd, term in bnd_terms.items()])
         sp = {
             'mat_type': 'matfree',
             'snes_type': 'ksponly',
@@ -367,6 +373,8 @@ class ErrorEstimator(object):
             'pc_type': 'jacobi',
         }
         solve(mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp)
+        if self.error_estimator == 'residual_flux':
+            return psi
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == 'L2' else psi
 
@@ -388,54 +396,25 @@ class ErrorEstimator(object):
         f_old = self._Psi_eta_steady(uv_old, elev_old)
         return f_time + self.theta*f + (1-self.theta)*f_old
 
-    def _psi_u_unsteady(self, uv, elev, uv_old, elev_old):
-        f = self._psi_u_steady(uv, elev, uv, elev)    # NOTE: Not semi-implicit
-        f_old = self._psi_u_steady(uv_old, elev_old, uv_old, elev_old)
+    def _psi_u_unsteady(self, uv, elev, uv_old, elev_old, uv_star, elev_star, uv_star_next, elev_star_next):
+        f = self._psi_u_steady(uv, elev, uv, elev, uv_star_next, elev_star_next)    # NOTE: Not semi-implicit
+        f_old = self._psi_u_steady(uv_old, elev_old, uv_old, elev_old, uv_star, elev_star)
         return self.theta*f + (1-self.theta)*f_old
 
-    def _psi_v_unsteady(self, uv, elev, uv_old, elev_old):
-        f = self._psi_v_steady(uv, elev, uv, elev)    # NOTE: Not semi-implicit
-        f_old = self._psi_v_steady(uv_old, elev_old, uv_old, elev_old)
+    def _psi_v_unsteady(self, uv, elev, uv_old, elev_old, uv_star, elev_star, uv_star_next, elev_star_next):
+        f = self._psi_v_steady(uv, elev, uv, elev, uv_star_next, elev_star_next)    # NOTE: Not semi-implicit
+        f_old = self._psi_v_steady(uv_old, elev_old, uv_old, elev_old, uv_star, elev_star)
         return self.theta*f + (1-self.theta)*f_old
 
-    def _psi_eta_unsteady(self, uv, elev, uv_old, elev_old):
-        f = self._psi_eta_steady(uv, elev, uv, elev)  # NOTE: Not semi-implicit
-        f_old = self._psi_eta_steady(uv_old, elev_old, uv_old, elev_old)
+    def _psi_eta_unsteady(self, uv, elev, uv_old, elev_old, uv_star, elev_star, uv_star_next, elev_star_next):
+        f = self._psi_eta_steady(uv, elev, uv, elev, uv_star_next, elev_star_next)  # NOTE: Not semi-implicit
+        f_old = self._psi_eta_steady(uv_old, elev_old, uv_old, elev_old, uv_star, elev_star)
         return self.theta*f + (1-self.theta)*f_old
 
     def strong_residuals(self, *args):
         """
         Compute the strong residual over a single
-        timestep, given current solution tuple
-        `(uv, elev)` and lagged solution tuple
-        `(uv_old, elev_old)`.
-        """
-        assert len(args) == 2 if self.steady else 4
-        if self.steady:
-            Psi_u = self._Psi_u_steady(*args)
-            Psi_v = self._Psi_v_steady(*args)
-            Psi_eta = self._Psi_eta_steady(*args)
-        else:
-            Psi_u = self._Psi_u_unsteady(*args)
-            Psi_v = self._Psi_v_unsteady(*args)
-            Psi_eta = self._Psi_eta_unsteady(*args)
-        if self.norm_type == 'L1':
-            return [
-                assemble(self.p0test*abs(Psi_u)*self.dx),
-                assemble(self.p0test*abs(Psi_v)*self.dx),
-                assemble(self.p0test*abs(Psi_eta)*self.dx),
-            ]
-        else:
-            return [
-                sqrt(abs(assemble(self.p0test*Psi_u*Psi_u*self.dx))),
-                sqrt(abs(assemble(self.p0test*Psi_v*Psi_v*self.dx))),
-                sqrt(abs(assemble(self.p0test*Psi_eta*Psi_eta*self.dx))),
-            ]
-
-    def weighted_residual(self, *args):
-        """
-        Evaluate the strong residual weighted by
-        the adjoint solution.
+        timestep.
         """
         nargs = len(args)
         assert nargs == 4 if self.steady else 8
@@ -445,10 +424,27 @@ class ErrorEstimator(object):
         else:
             Psi_uv = self._Psi_uv_unsteady(*args[:nargs//2])
             Psi_eta = self._Psi_eta_unsteady(*args[:nargs//2])
-        uv_star = args[nargs//2]
-        elev_star = args[nargs//2+1]
-        wr = inner(Psi_uv, uv_star) + inner(Psi_eta, elev_star)
-        return assemble(self.p0test*abs(wr)*self.dx)
+        if self.error_estimator == 'residual_flux':
+            uv_star = args[nargs//2]
+            elev_star = args[nargs//2+1]
+            # TODO: In time-dep case, apply adjoint_next and adjoint separately
+            return [
+                assemble(self.p0test*inner(Psi_uv[0], uv_star[0])*self.dx),
+                assemble(self.p0test*inner(Psi_uv[1], uv_star[1])*self.dx),
+                assemble(self.p0test*inner(Psi_eta, elev_star)*self.dx),
+            ]
+        elif self.norm_type == 'L1':
+            return [
+                assemble(self.p0test*abs(Psi_uv[0])*self.dx),
+                assemble(self.p0test*abs(Psi_uv[1])*self.dx),
+                assemble(self.p0test*abs(Psi_eta)*self.dx),
+            ]
+        else:
+            return [
+                sqrt(abs(assemble(self.p0test*Psi_uv[0]*Psi_uv[0]*self.dx))),
+                sqrt(abs(assemble(self.p0test*Psi_uv[1]*Psi_uv[1]*self.dx))),
+                sqrt(abs(assemble(self.p0test*Psi_eta*Psi_eta*self.dx))),
+            ]
 
     def flux_terms(self, *args):
         """
@@ -469,9 +465,9 @@ class ErrorEstimator(object):
             ]
         else:
             return [
-                self._psi_u_unsteady(*args),
-                self._psi_v_unsteady(*args),
-                self._psi_eta_unsteady(*args),
+                self._psi_u_unsteady(*args[:6]),
+                self._psi_v_unsteady(*args[:6]),
+                self._psi_eta_unsteady(*args[:6]),
             ]
 
     def recover_laplacians(self, uv, elev):
@@ -518,24 +514,24 @@ class ErrorEstimator(object):
         assert nargs == 4 if self.steady else 8
 
         # Terms for standard a posteriori error estimate
-        Psi = self.strong_residuals(*args[:nargs//2])
-        psi = self.flux_terms(*args[:nargs//2])
+        self.residuals = self.strong_residuals(*args)
+        self.fluxes = self.flux_terms(*args)
 
         # Weighting term for the adjoint
         if flux_form:
-            R = self.flux_terms(*args[nargs//2:])
+            self.weights = self.flux_terms(*args)
         else:
-            R = self.recover_laplacians(*args[nargs//2:2+nargs//2])
+            self.weights = self.recover_laplacians(*args[nargs//2:2+nargs//2])
             if not self.steady:  # Average recovered Laplacians
-                for R_i, R_old_i in zip(R, self.recover_laplacians(*args[-2:])):
-                    R_i += R_old_i
-                    R_i *= 0.5
+                for R, R_old in zip(self.weights, self.recover_laplacians(*args[-2:])):
+                    R += R_old
+                    R *= 0.5
 
         # Combine the two
         dq = Function(self.P0, name='Difference quotient')
         expr = 0
-        for Psi_i, psi_i, R_i in zip(Psi, psi, R):
-            expr += (Psi_i + psi_i/sqrt(self.h))*R_i
+        for Psi, psi, R in zip(self.residuals, self.fluxes, self.weights):
+            expr += (Psi + psi/sqrt(self.h))*R
         dq.project(expr)
         dq.interpolate(abs(dq))  # Ensure positivity
         return dq
@@ -545,8 +541,16 @@ class ErrorEstimator(object):
             flux_form = kwargs.get('flux_form', False)
             return self.difference_quotient(*args, flux_form=flux_form)
         elif self.error_estimator == 'residual_flux':
-            residual = self.weighted_residual(*args)
-            raise NotImplementedError  # TODO
+            self.residuals = self.strong_residuals(*args)
+            self.fluxes = self.flux_terms(*args)
+            dwr = self.residuals[0]
+            dwr += self.residuals[1]
+            dwr += self.residuals[2]
+            dwr += self.fluxes[0]
+            dwr += self.fluxes[1]
+            dwr += self.fluxes[2]
+            dwr.interpolate(abs(dwr))
+            return dwr
         else:
             raise ValueError
 
@@ -559,8 +563,8 @@ class ErrorEstimator(object):
             assert nargs == 4 if self.steady else 8
 
             # Terms for standard a posteriori error estimate
-            Psi = self.strong_residuals(*args[:nargs//2])
-            psi = self.flux_terms(*args[:nargs//2])
+            Psi = self.strong_residuals(*args)
+            psi = self.flux_terms(*args)
 
             # Weighting term for the adjoint
             if flux_form:
