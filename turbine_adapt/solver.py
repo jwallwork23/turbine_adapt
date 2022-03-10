@@ -6,6 +6,7 @@ class FarmSolver(FlowSolver2d):
     Modified solver which accepts :class:`ModelOptions2d` objects
     with more attributes than expected.
     """
+
     def __init__(self, options, mesh=None):
         """
         :arg options: :class:`FarmOptions` parameter object
@@ -30,5 +31,5 @@ class FarmSolver(FlowSolver2d):
 
         self.export_initial_state = True
         self.sediment_model = None
-        self.bnd_functions = {'shallow_water': {}, 'tracer': {}, 'sediment': {}}
+        self.bnd_functions = {"shallow_water": {}, "tracer": {}, "sediment": {}}
         self._isfrozen = True
