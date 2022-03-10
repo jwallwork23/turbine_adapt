@@ -1,13 +1,12 @@
-from thetis import create_directory
-from turbine_adapt.parse import Parser
+from turbine_adapt import *
 from turbine_adapt.plotting import *
+from options import ArrayOptions
 import h5py
 import numpy as np
-import os
 
 
-# Parse arguments
-parser = Parser("test_cases/array/plot_energy.py")
+# Parse user input
+parser = Parser("test_cases/array/plot_convergence.py")
 parser.add_argument(
     "configuration",
     help="Name defining test case configuration",
@@ -16,79 +15,68 @@ parser.add_argument(
 parsed_args = parser.parse_args()
 config = parsed_args.configuration
 
+
+def time_integrate(arr, dt=2.232):
+    """
+    Time integrate an array of turbine power outputs
+    that were obtained using Crank-Nicolson.
+
+    :arg arr: the (n_timesteps, n_turbines) array
+    :kwarg dt: the timestep
+    """
+    zeros = np.zeros(arr.shape[1])
+    off1 = np.vstack((zeros, arr))
+    off2 = np.vstack((arr, zeros))
+    return dt * 0.5 * np.sum(off1 + off2, axis=0)
+
+
 # Setup directories
-columns = [0, 1, 2, 3, 4, "overall"]
-targets = 5000.0 * 2.0 ** np.array([0, 1, 2, 3, 4, 5])
-cwd = os.path.dirname(__file__)
-plot_dir = create_directory(os.path.join(cwd, "plots", config))
+if COMM_WORLD.size > 1:
+    print_output(
+        f"Will not attempt to plot with {COMM_WORLD.size} processors."
+        " Run again in serial."
+    )
+    sys.exit(0)
+pwd = os.path.dirname(__file__)
+plot_dir = create_directory(os.path.join(pwd, "plots", config))
+output_dir = create_directory(os.path.join(pwd, "outputs", config))
 
-# Loop over runs
-approaches = ["fixed_mesh", "isotropic"]
-data = {
-    approach: {"E": {column: [] for column in columns}, "dofs": []}
-    for approach in approaches
-}
-for level, target in enumerate(targets):
-    for approach in approaches:
+# Collect power/energy output data
+energy_output = {0: {}, 1: {}, 2: {}, 3: {}, 4: {}, "overall": {}}
+loops = {"fixed_mesh": range(5), "isotropic": 5000.0 * 2.0 ** np.array(range(6))}
+for approach, levels in loops.items():
+    for level in range(5):
+        fname = f"{output_dir}/{approach}/level{level}/diagnostic_turbine.hdf5"
+        if not os.path.exists(fname):
+            print_output(f"{fname} does not exist")
+            continue
         if approach == "fixed_mesh":
-            run = f"level{level}"
+            options = ArrayOptions(level=level, staggered=config == "staggered")
+            dofs = 9 * options.mesh2d.num_cells()  # NOTE: assumes dg-dg
         else:
-            run = f"target{target:.0f}"
-        input_dir = os.path.join(cwd, "outputs", config, approach, run)
+            raise NotImplementedError  # TODO: Read from log
+        with h5py.File(fname, "r") as h5:
+            power = np.array(h5["current_power"]) * 1030.0 / 1.0e06  # MW
+            energy = time_integrate(power) / 3600.0  # MWh
+            for i in range(5):
+                if approach not in energy_output[i]:
+                    energy_output[i][approach] = {}
+                energy_output[i][approach][dofs] = sum(energy[3 * i : 3 * (i + 1)])
+            if approach not in energy_output["overall"]:
+                energy_output["overall"][approach] = {}
+            energy_output["overall"][approach][dofs] = sum(energy)
 
-        # Read DoF count from log
-        logfile = os.path.join(input_dir, "log")
-        if not os.path.exists(logfile):
-            print(f"Cannot load logfile {level} for {approach}.")
-            continue
-        dofs = 0
-        with open(logfile, "r") as f:
-            f.readline()
-            f.readline()
-            f.readline()
-            f.readline()
-            dofs += int(f.readline().split()[-1])
-            dofs += int(f.readline().split()[-1])
-        data[approach]["dofs"].append(dofs)
-
-        # Load data
-        input_file = os.path.join(input_dir, "diagnostic_turbine.hdf5")
-        if not os.path.exists(input_file):
-            print(f"Cannot load dataset {level} for {approach}.")
-            continue
-        with h5py.File(input_file, "r") as f:
-            power = np.array(f["current_power"])
-            time = np.array(f["time"])
-        assert len(power) == len(time)
-
-        # Compute energy output using trapezium rule on each timestep
-        for column in columns:
-            if column == "overall":
-                E = sum(data[approach]["E"][c][-1] for c in range(5))
-                data[approach]["E"][column].append(E)
-            else:
-                indices = [3 * column, 3 * column + 1, 3 * column + 2]
-                total_power = np.sum(power[:, indices], axis=1) * 1030.0 / 1.0e06
-                energy = 0
-                for i in range(len(total_power) - 1):
-                    energy += (
-                        0.5
-                        * (time[i + 1] - time[i])
-                        * (total_power[i + 1] + total_power[i])
-                    )
-                data[approach]["E"][column].append(energy / 3600)
-
-# Plot
-for column in columns:
-    fig, axes = plt.subplots(figsize=(7, 6))
-    for approach in approaches:
-        label = approach.capitalize().replace("_", " ")
-        axes.semilogx(
-            data[approach]["dofs"], data[approach]["E"][column], "--x", label=label
-        )
+# Plot DoF count vs energy output
+for subset, byapproach in energy_output.items():
+    fig, axes = plt.subplots()
+    for label, bydof in byapproach.items():
+        name = label.capitalize().replace("_", " ")
+        dofs = list(bydof.keys())
+        E = list(bydof.values())
+        axes.plot(dofs, E, "-x", label=name)
     axes.set_xlabel(r"DoF count")
     axes.set_ylabel(r"Energy [$\mathrm{MW\,h}$]")
-    axes.legend()
     axes.grid(True)
+    axes.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(plot_dir, f"energy_output_{column}.pdf"))
+    plt.savefig(f"{plot_dir}/energy_output_{subset}.pdf")

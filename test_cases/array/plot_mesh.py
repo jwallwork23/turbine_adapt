@@ -5,7 +5,7 @@ import sys
 from matplotlib.lines import Line2D
 
 
-# Parse for refinement level
+# Parse user input
 parser = Parser("test_cases/array/plot_mesh.py")
 parser.add_argument(
     "configuration",
