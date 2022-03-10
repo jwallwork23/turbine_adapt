@@ -9,15 +9,16 @@ class PowerOutputCallback(turbines.TurbineFunctionalCallback):
     Subclass of :class:`TurbineFunctionalCallback` which reduces the verbosity of
     print statements.
     """
+
     def message_str(self, current_power, average_power, average_profit):
-        power = 1030.0*sum(current_power)
-        if power < 1.0e+03:
+        power = 1030.0 * sum(current_power)
+        if power < 1.0e03:
             return f"current power:     {power:5.3f} W"
-        elif power < 1.0e+06:
+        elif power < 1.0e06:
             return f"current power:     {power/1.0e+03:5.3f} kW"
-        elif power < 1.0e+09:
+        elif power < 1.0e09:
             return f"current power:     {power/1.0e+06:5.3f} MW"
-        elif power < 1.0e+12:
+        elif power < 1.0e12:
             return f"current power:     {power/1.0e+09:5.3f} GW"
         else:
             return f"current power:     {power:10.4e} W"
