@@ -1,26 +1,37 @@
 from __future__ import absolute_import
-from turbine_adapt import Parser
+from turbine_adapt.parse import Parser, positive_int
 import os
 from options import ArrayOptions
 
 
 # Parse for refinement level
 parser = Parser(prog="test_cases/array/meshgen.py")
-parser.add_argument("refinement_level", 0, help="""
-    Number of refinements of farm region.""")
-parser.add_argument("configuration", "aligned", help="""
-    Choose from 'aligned' and 'staggered'.
-    """)
+parser.add_argument(
+    "refinement_level",
+    help="Number of refinements of farm region",
+    type=positive_int,
+)
+parser.add_argument(
+    "configuration",
+    help="Name defining test case configuration",
+    choices=["aligned", "staggered"],
+)
 parsed_args = parser.parse_args()
 level = int(parsed_args.refinement_level)
 config = parsed_args.configuration
-assert config in ['aligned', 'staggered']
 
 # Boiler plate
-code = "//" + 80*"*" + f"""
+code = (
+    "//"
+    + 80 * "*"
+    + f"""
 // This geometry file was automatically generated using the `meshgen.py` script
 // with refinement level {level:d}.
-""" + "//" + 80*"*" + "\n\n"
+"""
+    + "//"
+    + 80 * "*"
+    + "\n\n"
+)
 
 # Domain and turbine specification
 op = ArrayOptions(meshgen=True)
@@ -72,7 +83,13 @@ for col in range(5):
             if config == "aligned":
                 code += point_str % (point, s1, col - 2, s2, 1 - row)
             elif config == "staggered":
-                code += point_str % (point, s1, col - 2, s2, 1 - row + (-1)**col*0.25)
+                code += point_str % (
+                    point,
+                    s1,
+                    col - 2,
+                    s2,
+                    1 - row + (-1) ** col * 0.25,
+                )
             else:
                 raise NotImplementedError  # TODO
             point += 1
@@ -106,7 +123,9 @@ Plane Surface(1) = {1, 17};
 surface_str = "Plane Surface(%d) = {%d};\n"
 for surface in range(2, 17):
     code += surface_str % (surface, surface)
-code += "Plane Surface(17) = {17, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};\n"
+code += (
+    "Plane Surface(17) = {17, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};\n"
+)
 
 # Physical surfaces
 code += "\n// Physical surfaces\nPhysical Surface(1) = {1, 17};"
@@ -115,5 +134,7 @@ for surface in range(2, 17):
     code += surface_str % (surface, surface)
 
 # Write to file
-with open(os.path.join(op.resource_dir, f"channel_box_{level}_{config}.geo"), 'w+') as f:
+with open(
+    os.path.join(op.resource_dir, f"channel_box_{level}_{config}.geo"), "w+"
+) as f:
     f.write(code)
