@@ -26,7 +26,8 @@ solver_obj = FarmSolver(options)
 options.apply_boundary_conditions(solver_obj)
 solver_obj.add_callback(PowerOutputCallback(solver_obj), 'timestep')
 vorticity_2d = Function(solver_obj.function_spaces.P1_2d, name='vorticity_2d')
-vorticity_calculator = VorticityCalculator2D(vorticity_2d, solver_obj)
+uv_2d = solver_obj.fields.uv_2d
+vorticity_calculator = VorticityCalculator2D(uv_2d, vorticity_2d)
 solver_obj.add_new_field(
     vorticity_2d, 'vorticity_2d', 'Vorticity', 'Vorticity2d',
     unit='s-1', preproc_func=vorticity_calculator.solve,
