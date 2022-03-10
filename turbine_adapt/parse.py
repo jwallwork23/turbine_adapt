@@ -1,117 +1,195 @@
+import argparse
+import numpy as np
+
+
 __all__ = ["Parser"]
 
 
-class Parser(object):
-    """
-    Custom argument parser with pre-defined arguments which
-    allows setting defaults.
-    """
-    def __init__(self, **kwargs):
-        import argparse
-        self._parser = argparse.ArgumentParser(**kwargs)
-        self._help = {
-            'approach': {'type': str, 'msg': """
-                Mesh adaptation approach (default '{:s}').
-                """},
-            'error_indicator': {'type': str, 'msg': """
-                Error indicator formulation (default '{:s}').
-                """},
-            'level': {'type': int, 'msg': """
-                Resolution level of initial mesh (default {:d}).
-                """},
-            'end_time': {'type': float, 'msg': """
-                Simulation end time in seconds (default {:.1f}).
-                """},
-            'num_tidal_cycles': {'type': float, 'msg': """
-                Simulation end time in terms of tidal cycles (default {:.1f}).
-                """},
-            'num_meshes': {'type': int, 'msg': """
-                Number of meshes in the fixed point iteration loop (default {:d}).
-                """},
-            'miniter': {'type': int, 'msg': """
-                Minimum number of fixed point iterations (default {:d}).
-                """},
-            'maxiter': {'type': int, 'msg': """
-                Maximum number of fixed point iterations (default {:d}). If set to zero,
-                mesh adaptation is not applied.
-                """},
-            'element_rtol': {'type': float, 'msg': """
-                Relative tolerance for element count convergence (default {:.4e})
-                """},
-            'qoi_rtol': {'type': float, 'msg': """
-                Relative tolerance for quantity of interest convergence (default {:.4e})
-                """},
-            'norm_order': {'type': float, 'msg': """
-                Order p used in L-p space-time normalisation (default {:}). Choose a value
-                greater than or equal to one, or 'inf' to specify L-infinity normalisation.
-                """},
-            'target': {'type': float, 'msg': """
-                Target *spatial* complexity (default {:.4e}), i.e. metric complexity
-                associated with a single mesh iteration.
-                """},
-            'h_min': {'type': float, 'msg': """
-                Minimum tolerated element size in metres (default {:.4e}.
-                """},
-            'h_max': {'type': float, 'msg': """
-                Maximum tolerated element size in metres (default {:.4e}.
-                """},
-            'turbine_h_max': {'type': float, 'msg': """
-                Maximum tolerated element size in turbine footprints in metres (default {:.4e}.
-                """},
-            'plot_bathymetry': {'type': bool, 'msg': """
-                Toggle plotting of bathymetry field (default {:b}).
-                """},
-            'plot_drag': {'type': bool, 'msg': """
-                Toggle plotting of drag field (default {:b}).
-                """},
-            'plot_metric': {'type': bool, 'msg': """
-                Toggle plotting of metric field (default {:b}).
-                """},
-            'load_metric': {'type': bool, 'msg': """
-                Toggle loading metric data from file (default {:b}).
-                """},
-            'flux_form': {'type': bool, 'msg': """
-                Toggle whether to use the flux form of the difference quotient
-                error indicator (default {:b}).
-                """},
-            'load_index': {'type': int, 'msg': """
-                Index for loading mesh and metric data from file (default {:d}).
-                """},
-        }
-        self._added = {}
+def _check_positive(value, typ):
+    tvalue = typ(value)
+    if tvalue <= 0:
+        raise argparse.ArgumentTypeError(f"{value} is an invalid positive {typ} value")
+    return tvalue
 
-    def add_argument(self, label, default, help=None):
-        """
-        :arg label: argument label, possibly prepended with '-'
-        :arg default: default value to assign
-        :kwarg help: optional help string, which should
-            be a format string which accepts the default
-        """
-        tag = label[1:] if label[0] == '-' else label
-        if help is not None:
-            kwargs = dict(help=help)
-        elif tag in self._help:
-            kwargs = dict(help=self._help[tag]['msg'].format(default))
-        else:
-            kwargs = {}
-        if tag not in self._help:
-            self._help[tag] = dict(type=type(default))
-        self._parser.add_argument(label, **kwargs)
-        self._added[tag] = default
 
-    def parse_args(self):
-        """
-        Parse arguments and return as an :class:`AttrDict`.
-        """
-        from thetis.utility import AttrDict
-        parsed = self._parser.parse_args()
-        out = AttrDict()
-        for tag in self._added:
-            p = getattr(parsed, tag)
-            if tag == 'norm_order' and p == 'inf':
-                out[tag] = 'inf'
-            elif self._help[tag]['type'] == bool and self._added[tag]:
-                out[tag] = False if tag == '0' else True
-            else:
-                out[tag] = self._help[tag]['type'](p or self._added[tag])
-        return out
+positive_float = lambda value: _check_positive(value, float)
+positive_int = lambda value: _check_positive(value, int)
+
+
+def _check_nonnegative(value, typ):
+    tvalue = typ(value)
+    if tvalue < 0:
+        raise argparse.ArgumentTypeError(f"{value} is an invalid positive {typ} value")
+    return tvalue
+
+
+nonnegative_float = lambda value: _check_nonnegative(value, float)
+nonnegative_int = lambda value: _check_nonnegative(value, int)
+
+
+def _check_in_range(value, typ, l, u):
+    tvalue = typ(value)
+    if not (tvalue >= l and tvalue <= u):
+        raise argparse.ArgumentTypeError(f"{value} is not bounded by {(l, u)}")
+    return tvalue
+
+
+def bounded_float(l, u):
+    def chk(value):
+        return _check_in_range(value, float, l, u)
+
+    return chk
+
+
+class Parser(argparse.ArgumentParser):
+    """
+    Custom :class:`ArgumentParser` for `turbine_adapt`.
+    """
+
+    def __init__(self, prog):
+        super().__init__(
+            self, prog, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
+
+    def parse_setup(self):
+        self.add_argument(
+            "--level",
+            help="Resolution level of initial mesh",
+            type=positive_int,
+            default=0,
+        )
+        self.add_argument(
+            "--ramp_level",
+            help="Resolution level of spin-up run",
+            type=positive_int,
+            default=5,
+        )
+        self.add_argument(
+            "--end_time",
+            help="Simulation end time in seconds",
+            type=positive_float,
+            default=None,
+        )
+        self.add_argument(
+            "--num_tidal_cycles",
+            help="Simulation end time in terms of tidal cycles",
+            type=positive_float,
+            default=0.5,
+        )
+        self.add_argument(
+            "--num_meshes",
+            help="Number of meshes in the fixed point iteration loop",
+            type=positive_int,
+            default=40,
+        )
+
+    def parse_convergence_criteria(self):
+        self.add_argument(
+            "--miniter",
+            help="Minimum number of iterations",
+            type=positive_int,
+            default=3,
+        )
+        self.add_argument(
+            "--maxiter",
+            help="Maximum number of iterations",
+            type=positive_int,
+            default=5,
+        )
+        self.add_argument(
+            "--qoi_rtol",
+            help="Relative tolerance for QoI",
+            type=positive_float,
+            default=0.005,
+        )
+        self.add_argument(
+            "--element_rtol",
+            help="Element count tolerance",
+            type=positive_float,
+            default=0.005,
+        )
+
+    def parse_approach(self):
+        self.add_argument(
+            "-a",
+            "--approach",
+            help="Adaptive approach to consider",
+            choices=["isotropic_dwr", "anisotropic_dwr"],
+            default="isotropic_dwr",
+        )
+
+    def parse_indicator(self):
+        self.add_argument(
+            "-i",
+            "--indicator",
+            help="Error indicator formulation",
+            choices=["difference_quotient"],
+            default="difference_quotient",
+        )
+        self.add_argument(
+            "--flux_form",
+            help="Toggle whether to use the flux form of the difference quotient indicator",
+            action="store_true",
+        )
+
+    def parse_metric_parameters(self):
+        self.add_argument(
+            "--target_complexity",
+            help="Target metric complexity",
+            type=positive_float,
+            default=10000.0,
+        )
+        self.add_argument(
+            "--norm_order",
+            help="Order p for L^p normalisation",
+            type=bounded_float(1.0, np.inf),
+            default=1.0,
+        )
+        self.add_argument(
+            "--h_min",
+            help="Minimum metric magnitude",
+            type=positive_float,
+            default=0.01,
+        )
+        self.add_argument(
+            "--h_max",
+            help="Maximum metric magnitude",
+            type=positive_float,
+            default=100.0,
+        )
+        self.add_argument(
+            "--turbine_h_max",
+            help="Maximum metric magnitude inside turbine footprint",
+            type=positive_float,
+            default=2.0,
+        )
+
+    def parse_plotting(self):
+        self.add_argument(
+            "--plot_bathymetry",
+            help="Toggle plotting of bathymetry field",
+            action="store_true",
+        )
+        self.add_argument(
+            "--plot_drag",
+            help="Toggle plotting of drag field",
+            action="store_true",
+        )
+        self.add_argument(
+            "--plot_metric",
+            help="Toggle plotting of metric",
+            action="store_true",
+        )
+
+    def parse_loading(self):
+        self.add_argument(
+            "--load_metric",
+            help="Toggle loading of metric data from file",
+            action="store_true",
+        )
+        self.add_argument(
+            "--load_index",
+            help="Index for loading mesh and metric data from file",
+            type=positive_int,
+            default=0,
+        )
