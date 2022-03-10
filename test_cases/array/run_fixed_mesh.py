@@ -46,7 +46,7 @@ solver_obj.add_new_field(
     unit="s-1",
     preproc_func=vorticity_calculator.solve,
 )
-options.fields_to_export = ["uv_2d", "elev_2d", "vorticity_2d"]
+options.fields_to_export = ["uv_2d", "vorticity_2d"]
 options.apply_initial_conditions(solver_obj)
 
 # Solve
