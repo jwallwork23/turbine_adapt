@@ -87,7 +87,7 @@ class ArrayOptions(FarmOptions):
         self.omega = 2 * pi / self.tide_time
 
         # I/O
-        self.fields_to_export = ["uv_2d", "elev_2d"]
+        self.fields_to_export = ["uv_2d"]
         self.fields_to_export_hdf5 = []
 
     @property
