@@ -20,6 +20,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         self.options = options
         self.root_dir = root_dir
         self.integrated_quantity = qoi
+        self.keep_log = False
 
         # Partition time interval
         dt = options.timestep
@@ -82,7 +83,8 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             i_export = int(np.round(t_start / options.simulation_export_time))
 
             # Create a new solver object and assign boundary conditions
-            solver_obj = FarmSolver(options, mesh=mesh)
+            solver_obj = FarmSolver(options, mesh=mesh, keep_log=self.keep_log)
+            self.keep_log = True
             options.apply_boundary_conditions(solver_obj)
             compute_power = model_options.pop("compute_power", False)
             compute_vorticity = model_options.pop("compute_vorticity", False)
@@ -505,9 +507,4 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
             # Increment
             fp_iteration += 1
-
-        # Log convergence reason
-        with open(os.path.join(output_dir, "log"), "a+") as f:
-            f.write(
-                f"Converged in {fp_iteration+1} iterations due to {converged_reason}"
-            )
+        print_output(f"Converged in {fp_iteration+1} iterations due to {converged_reason}")
