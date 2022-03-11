@@ -1,12 +1,16 @@
-all: dir clean mesh plot
+all: dir clean mesh plot_setup
 
+CONFIGS			= aligned staggered
 FIXED_MESHES	= 0 1 2 3 4
+TARGETS			=
+# TODO: set target complexities
+
 
 # --- Setup
 
 dir:
 	for approach in fixed_mesh hessian vorticity isotropic anisotropic; do \
-		for config in aligned staggered; do \
+		for config in $(CONFIGS); do \
 			mkdir -p plots/$$config/$$approach; \
 			mkdir -p outputs/$$config/$$approach; \
 		done; \
@@ -30,41 +34,42 @@ staggered_mesh:
 
 # --- Runs
 
-ramp: ramp_aligned ramp_staggered
-
-ramp_aligned:
-	python3 ramp.py aligned --level 4
-
-ramp_staggered:
-	python3 ramp.py staggered --level 4
-
-fixed: fixed_aligned fixed_staggered
-
-fixed_aligned:
-	for level in $(FIXED_MESHES); do \
-		python3 run_fixed_mesh.py aligned --level $$level; \
+ramp:
+	for config in $(CONFIGS); do \
+		for level in $(FIXED_MESHES); do \
+			python3 ramp.py $$config --level $$level; \
+		done; \
 	done
 
-fixed_staggered:
-	for level in $(FIXED_MESHES); do \
-		python3 run_fixed_mesh.py staggered --level $$level; \
+fixed_mesh:
+	for config in $(CONFIGS); do \
+		for level in $(FIXED_MESHES); do \
+			python3 run_fixed_mesh.py $$config --level $$level; \
+		done; \
+	done
+
+isotropic:
+	for config in $(CONFIGS); do \
+		for level in $(TARGETS); do \
+			python3 run_adapt_goal_based.py $$config --target_complexity $$target; \
+		done; \
 	done
 
 
 # --- Plotting
 
 plot_setup:
-	for config in aligned staggered; do \
+	for config in $(CONFIGS); do \
 		python3 plot_mesh.py $$config; \
 		python3 plot_mesh_reynolds_number.py $$config; \
 	done
 
 plot_fixed_mesh:
-	for config in aligned staggered; do \
+	for config in $(CONFIGS); do \
 		for level in $(FIXED_MESHES); do \
-			python3 plot_power.py $$config ramp -a fixed_mesh --level $$level; \
-			python3 plot_power.py $$config run -a fixed_mesh --level $$level; \
-			python3 plot_power.py $$config both -a fixed_mesh --level $$level; \
+			for mode in ramp run both; do \
+				python3 plot_power.py $$config $$mode -a fixed_mesh --level $$level; \
+			done; \
 		done; \
 	done
 
