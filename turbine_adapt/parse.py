@@ -55,7 +55,7 @@ class Parser(argparse.ArgumentParser):
         self.add_argument(
             "--level",
             help="Resolution level of initial mesh",
-            type=positive_int,
+            type=nonnegative_int,
             default=0,
         )
         self.add_argument(
