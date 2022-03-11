@@ -60,8 +60,12 @@ plot_setup:
 	done
 
 plot_fixed_mesh:
-	for level in $(FIXED_MESHES); do \
-		python3 plot_power.py -approach fixed_mesh -level $$level; \
+	for config in aligned staggered; do \
+		for level in $(FIXED_MESHES); do \
+			python3 plot_power.py $$config ramp -a fixed_mesh --level $$level; \
+			python3 plot_power.py $$config run -a fixed_mesh --level $$level; \
+			python3 plot_power.py $$config both -a fixed_mesh --level $$level; \
+		done; \
 	done
 
 
