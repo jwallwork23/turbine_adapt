@@ -1,6 +1,7 @@
 from turbine_adapt import *
 from turbine_adapt.parse import Parser, positive_float
 from turbine_adapt.plotting import *
+from firedrake import *
 from options import ArrayOptions
 import os
 
@@ -34,7 +35,7 @@ parsed_args = parser.parse_args()
 config = parsed_args.configuration
 
 # Set parameters
-options = ArrayOptions(**parsed_args)
+options = ArrayOptions(**vars(parsed_args))
 
 # Plot viscosity
 nu = options.horizontal_viscosity

@@ -1,7 +1,7 @@
 from turbine_adapt import *
 from turbine_adapt.plotting import *
+from firedrake import triplot
 from options import ArrayOptions
-import sys
 from matplotlib.lines import Line2D
 
 
@@ -14,14 +14,6 @@ parser.add_argument(
 )
 parsed_args = parser.parse_args()
 config = parsed_args.configuration
-
-# Plotting
-if COMM_WORLD.size > 1:
-    print_output(
-        f"Will not attempt to plot with {COMM_WORLD.size} processors."
-        " Run again in serial."
-    )
-    sys.exit(0)
 plot_dir = create_directory(os.path.join(os.path.dirname(__file__), "plots", config))
 kwargs = dict(interior_kw={"linewidth": 0.1}, boundary_kw={"color": "k"})
 patch_kwargs = dict(facecolor="none", linewidth=2)
@@ -59,17 +51,17 @@ for i, loc in enumerate(centres):
     patch_kwargs["edgecolor"] = f"C{i // 3}"
     centre = (loc[0] - w / 2, loc[1] - d / 2)
     axes.add_patch(ptch.Rectangle(centre, w, d, **patch_kwargs))
-plt.savefig(os.path.join(plot_dir, f"mesh_{config}.pdf"))
+plt.savefig(f"{plot_dir}/{config}_mesh.pdf")
 
 # Zoom in on array region
 axes.set_xlim([-625, 625])
 axes.set_ylim([-210, 210])
 axes.set_xticks(np.linspace(-600, 600, 7))
 axes.set_yticks(np.linspace(-200, 200, 9))
-plt.savefig(os.path.join(plot_dir, f"mesh_zoom_{config}.pdf"))
+plt.savefig(f"{plot_dir}/mesh_zoom_{config}.pdf")
 
 colours = ["b", "C0", "mediumturquoise", "mediumseagreen", "g"]
-bnd_colours = ["C1", "r"]
+bnd_colours = ["y", "r"]
 
 # Plot domain without mesh
 fig, axes = plt.subplots(figsize=(12, 5))
@@ -97,9 +89,7 @@ patch_kwargs["edgecolor"] = "gray"
 patch = ptch.Rectangle((-w / 2, -d / 2), w, d, **patch_kwargs)
 patches.append(patch)
 axes.add_patch(patch)
-fname = f"domain_{config}"
-plt.savefig(os.path.join(plot_dir, fname + ".pdf"))
-plt.savefig(os.path.join(plot_dir, fname + ".jpg"))
+plt.savefig(f"{plot_dir}/{config}_domain.pdf")
 
 plt.figure()
 plt.gca().axis(False)
@@ -116,6 +106,4 @@ labels = [
 ]
 plt.legend(patches, labels)
 plt.tight_layout()
-fname = "legend_domain"
-plt.savefig(os.path.join(plot_dir, fname + ".pdf"))
-plt.savefig(os.path.join(plot_dir, fname + ".jpg"))
+plt.savefig(f"{plot_dir}/legend_domain.pdf")

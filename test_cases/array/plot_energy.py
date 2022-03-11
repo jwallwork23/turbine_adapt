@@ -89,4 +89,4 @@ for subset, byapproach in energy_output.items():
     axes.grid(True)
     axes.legend()
     plt.tight_layout()
-    plt.savefig(f"{plot_dir}/energy_output_{subset}_{mode}.pdf")
+    plt.savefig(f"{plot_dir}/{config}_energy_output_{subset}_{mode}.pdf")

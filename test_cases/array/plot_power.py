@@ -4,6 +4,7 @@ from turbine_adapt.plotting import *
 import h5py
 import numpy as np
 import os
+import sys
 
 
 # Parse arguments
@@ -24,7 +25,7 @@ parser.parse_approach()
 parser.parse_metric_parameters()
 parsed_args = parser.parse_args()
 config = parsed_args.configuration
-approach = parsed_args.approach
+approach = parsed_args.approach.split("_dwr")[0]
 level = parsed_args.level
 target = parsed_args.target_complexity
 mode = parsed_args.mode
@@ -43,9 +44,13 @@ time = np.array([]).reshape((0, 1))
 for m in modes:
     ramp = m == "ramp"
     input_dir = output_dir + "/ramp" if ramp else output_dir
+    fname = f"{input_dir}/diagnostic_turbine.hdf5"
+    if not os.path.exists(fname):
+        print(f"File {fname} does not exist")
+        sys.exit(0)
 
     # Load data
-    with h5py.File(os.path.join(input_dir, "diagnostic_turbine.hdf5"), "r") as f:
+    with h5py.File(fname, "r") as f:
         t = np.array(f["time"])
         if not ramp:
             t += 4464.0
@@ -72,7 +77,7 @@ else:
 axes.set_ylabel(r"Power output [$\mathrm{MW}$]")
 axes.grid(True)
 plt.tight_layout()
-plt.savefig(f"{plot_dir}/power_output_{mode}.pdf")
+plt.savefig(f"{plot_dir}/{config}_power_output_{run}_{mode}.pdf")
 
 # Plot power output of each column
 fig, axes = plt.subplots()
@@ -88,19 +93,21 @@ elif mode == "run":
     axes.set_xticks([1, 1.125, 1.25, 1.375, 1.5])
 else:
     axes.set_xticks([0, 0.25, 0.5, 0.75, 1, 1.25, 1.5])
-axes.set_ylim([0, 15])
+axes.set_ylim([0, 15 if config == "aligned" else 18])
 axes.grid(True)
 plt.tight_layout()
-plt.savefig(f"{plot_dir}/power_output_column_{mode}.pdf")
+plt.savefig(f"{plot_dir}/{config}_power_output_column_{run}_{mode}.pdf")
 
 # Plot legend separately
-fig2, axes2 = plt.subplots()
-lines, labels = axes.get_legend_handles_labels()
-legend = axes2.legend(lines, labels, fontsize=18, frameon=False, ncol=5)
-fig2.canvas.draw()
-axes2.set_axis_off()
-bbox = legend.get_window_extent().transformed(fig2.dpi_scale_trans.inverted())
-plt.savefig(f"{plot_dir}/legend_column.pdf", bbox_inches=bbox)
+fname = "plots/legend_column.pdf"
+if not os.path.exists(fname):
+    fig2, axes2 = plt.subplots()
+    lines, labels = axes.get_legend_handles_labels()
+    legend = axes2.legend(lines, labels, fontsize=18, frameon=False, ncol=5)
+    fig2.canvas.draw()
+    axes2.set_axis_off()
+    bbox = legend.get_window_extent().transformed(fig2.dpi_scale_trans.inverted())
+    plt.savefig(fname, bbox_inches=bbox)
 
 # Plot total power output
 fig, axes = plt.subplots()
@@ -116,4 +123,4 @@ axes.set_xlabel(r"Time [$\mathrm s$]")
 axes.set_ylabel(r"Power output [$\mathrm{MW}$]")
 axes.grid(True)
 plt.tight_layout()
-plt.savefig(f"{plot_dir}/total_power_output_{mode}.pdf")
+plt.savefig(f"{plot_dir}/{config}_total_power_output_{run}_{mode}.pdf")
