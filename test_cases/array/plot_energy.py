@@ -61,7 +61,9 @@ for approach, levels in loops.items():
             for i in range(5):
                 if approach not in energy_output[i]:
                     energy_output[i][approach] = {}
-                energy_output[i][approach][dofs] = sum(energy[3 * i : 3 * (i + 1)])
+                j = 3 * i
+                k = 3 * (i + 1)
+                energy_output[i][approach][dofs] = sum(energy[j:k])
             if approach not in energy_output["overall"]:
                 energy_output["overall"][approach] = {}
             energy_output["overall"][approach][dofs] = sum(energy)
