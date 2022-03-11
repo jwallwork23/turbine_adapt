@@ -1,6 +1,9 @@
 from turbine_adapt import *
 from turbine_adapt.error_estimation import ErrorEstimator
-import pyadjoint
+from thetis import *
+from firedrake.meshadapt import RiemannianMetric, adapt
+from firedrake_adjoint import pyadjoint
+from pyroteus.utility import File, Mesh
 
 
 __all__ = ["GoalOrientedTidalFarm"]
@@ -210,7 +213,9 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             "flux_form",
             "norm_order",
         }
-        assert expected.issubset(set(parsed_args.keys())), "Missing required arguments"
+        if not expected.issubset(set(parsed_args.keys())):
+            missing = expected.difference(set(parsed_args.keys()))
+            raise AttributeError(f"Missing required arguments {missing}")
         output_dir = options.output_directory
         end_time = options.simulation_end_time
         dt = options.timestep
@@ -468,6 +473,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 hmax_func = interpolate(expr, FunctionSpace(mesh, "CG", 1))
                 h_max.append(hmax_func)
             metrics = enforce_element_constraints(metrics, parsed_args.h_min, h_max)
+            metrics = [RiemannianMetric(mesh, metric) for mesh, metric in zip(self.meshes, metrics)]
 
             # Plot metrics
             outfiles.metric = File(os.path.join(output_dir, "Metric2d.pvd"))

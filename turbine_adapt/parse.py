@@ -121,7 +121,7 @@ class Parser(argparse.ArgumentParser):
     def parse_indicator(self):
         self.add_argument(
             "-i",
-            "--indicator",
+            "--error_indicator",
             help="Error indicator formulation",
             choices=["difference_quotient"],
             default="difference_quotient",
