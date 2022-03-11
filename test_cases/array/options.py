@@ -98,8 +98,9 @@ class ArrayOptions(FarmOptions):
     def ramp(self):
         if self.ramp_dir is None:
             return
-        mesh_fname = f"channel_box_{self.ramp_level}_{self.configuration}"
-        ramp_mesh = Mesh(os.path.join(self.resource_dir, mesh_fname + ".msh"))
+        fpath = f"{self.resource_dir}/{self.configuration}"
+        mesh_fname = f"{fpath}/channel_box_{self.ramp_level}"
+        ramp_mesh = Mesh(mesh_fname + ".msh")
         ramp_file = os.path.join(self.ramp_dir, "ramp")
         if not os.path.exists(ramp_file + ".h5"):
             raise IOError(f"No ramp file found at {ramp_file}.h5")

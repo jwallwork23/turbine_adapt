@@ -25,7 +25,7 @@ config = parsed_args.configuration
 
 # Set parameters
 ramp_level = parsed_args.ramp_level
-ramp_dir = os.path.join("outputs", config, "fixed_mesh", f"level{ramp_level}")
+ramp_dir = os.path.join("outputs", config, "fixed_mesh", f"level{ramp_level}", "ramp")
 options = ArrayOptions(
     level=parsed_args.level,
     staggered=config == "staggered",
