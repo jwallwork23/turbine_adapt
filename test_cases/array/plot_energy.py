@@ -12,8 +12,14 @@ parser.add_argument(
     help="Name defining test case configuration",
     choices=["aligned", "staggered"],
 )
+parser.add_argument(
+    "--ramp",
+    help="Should we use ramp data, rather than subsequent run?",
+    action="store_true",
+)
 parsed_args = parser.parse_args()
 config = parsed_args.configuration
+ramp = parsed_args.ramp
 
 
 def time_integrate(arr, dt=2.232):
@@ -39,22 +45,28 @@ if COMM_WORLD.size > 1:
     sys.exit(0)
 pwd = os.path.dirname(__file__)
 plot_dir = create_directory(os.path.join(pwd, "plots", config))
-output_dir = create_directory(os.path.join(pwd, "outputs", config))
+output_dir = os.path.join(pwd, "outputs", config)
 
 # Collect power/energy output data
 energy_output = {0: {}, 1: {}, 2: {}, 3: {}, 4: {}, "overall": {}}
 loops = {"fixed_mesh": range(5), "isotropic": 5000.0 * 2.0 ** np.array(range(6))}
 for approach, levels in loops.items():
     for level in range(5):
-        fname = f"{output_dir}/{approach}/level{level}/diagnostic_turbine.hdf5"
+        fpath = f"{output_dir}/{approach}/level{level}"
+        if ramp:
+            fpath += "/ramp"
+        fname = f"{fpath}/diagnostic_turbine.hdf5"
         if not os.path.exists(fname):
             print_output(f"{fname} does not exist")
             continue
         if approach == "fixed_mesh":
             options = ArrayOptions(level=level, staggered=config == "staggered")
-            dofs = 9 * options.mesh2d.num_cells()  # NOTE: assumes dg-dg
+            if options.element_family == "dg-dg":
+                dofs = 9 * options.mesh2d.num_cells()
+            else:
+                raise NotImplementedError
         else:
-            raise NotImplementedError  # TODO: Read from log
+            raise NotImplementedError  # TODO: Read from log?
         with h5py.File(fname, "r") as h5:
             power = np.array(h5["current_power"]) * 1030.0 / 1.0e06  # MW
             energy = time_integrate(power) / 3600.0  # MWh
@@ -81,4 +93,7 @@ for subset, byapproach in energy_output.items():
     axes.grid(True)
     axes.legend()
     plt.tight_layout()
-    plt.savefig(f"{plot_dir}/energy_output_{subset}.pdf")
+    fname = f"{plot_dir}/energy_output_{subset}"
+    if ramp:
+        fname += "_ramp"
+    plt.savefig(fname + ".pdf")
