@@ -46,13 +46,14 @@ if not ramp:
     time += 4464.0
 time /= 4464.0
 
-colours = ["black", "dimgrey", "grey", "darkgrey", "lightgrey"]
+colours = ["b", "C0", "mediumturquoise", "mediumseagreen", "g"]
+kw = {"linewidth": 1.0}
 
 # Plot power output of each turbine
 fig, axes = plt.subplots()
 for i in range(15):
     _power = power[:, i] * 1030.0 / 1.0e06
-    axes.plot(time, _power, label=f"Turbine {i+1}", color=colours[i // 3])
+    axes.plot(time, _power, label=f"Turbine {i+1}", color=colours[i // 3], **kw)
 axes.set_xlabel(r"Time/$T_{\mathrm{tide}}$")
 if ramp:
     axes.set_xlim([0, 1])
@@ -72,7 +73,7 @@ plt.savefig(fname + ".pdf")
 fig, axes = plt.subplots()
 for i in range(5):
     _power = power[:, 3 * i] + power[:, 3 * i + 1] + power[:, 3 * i + 2]
-    axes.plot(time, _power * 1030.0 / 1.0e06, label=f"{i+1}", color=colours[i])
+    axes.plot(time, _power * 1030.0 / 1.0e06, label=f"{i+1}", color=colours[i], **kw)
 axes.set_xlabel(r"Time/$T_{\mathrm{tide}}$")
 axes.set_ylabel(r"Power output [$\mathrm{MW}$]")
 if ramp:
@@ -100,7 +101,7 @@ plt.savefig(f"{plot_dir}/legend_column.pdf", bbox_inches=bbox)
 
 # Plot total power output
 fig, axes = plt.subplots()
-axes.plot(time, np.sum(power, axis=1) * 1030.0 / 1.0e06, label=f"Turbine {i}")
+axes.plot(time, np.sum(power, axis=1) * 1030.0 / 1.0e06, label=f"Turbine {i}", **kw)
 if ramp:
     axes.set_xlim([0, 1])
     axes.set_xticks([0, 0.25, 0.5, 0.75, 1])

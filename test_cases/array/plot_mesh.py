@@ -68,13 +68,14 @@ axes.set_xticks(np.linspace(-600, 600, 7))
 axes.set_yticks(np.linspace(-200, 200, 9))
 plt.savefig(os.path.join(plot_dir, f"mesh_zoom_{config}.pdf"))
 
-colours = ["black", "dimgrey", "grey", "darkgrey", "lightgrey"]
+colours = ["b", "C0", "mediumturquoise", "mediumseagreen", "g"]
+bnd_colours = ["C1", "r"]
 
 # Plot domain without mesh
 fig, axes = plt.subplots(figsize=(12, 5))
 kwargs["interior_kw"] = {"color": "w"}
 kwargs["boundary_kw"].pop("color")
-kwargs["boundary_kw"]["colors"] = ["C2", "C1", "C2", "C1"]
+kwargs["boundary_kw"]["colors"] = 2 * bnd_colours
 kwargs["boundary_kw"]["linewidths"] = 2.0
 triplot(options.mesh2d, axes=axes, **kwargs)
 axes.legend().remove()
@@ -92,7 +93,7 @@ for i, loc in enumerate(centres):
     axes.add_patch(patch)
 w = 1700
 d = 450
-patch_kwargs["edgecolor"] = "C0"
+patch_kwargs["edgecolor"] = "gray"
 patch = ptch.Rectangle((-w / 2, -d / 2), w, d, **patch_kwargs)
 patches.append(patch)
 axes.add_patch(patch)
@@ -102,21 +103,18 @@ plt.savefig(os.path.join(plot_dir, fname + ".jpg"))
 
 plt.figure()
 plt.gca().axis(False)
-colors = ["C2", "C1"]
-lines = [Line2D([0], [0], color=c, linewidth=2, linestyle="-") for c in colors]
-for patch in patches:
-    lines.append(patch)
+patches += [Line2D([0], [0], color=c, linewidth=2, linestyle="-") for c in bnd_colours]
 labels = [
-    r"$\Gamma_{\mathrm{freeslip}}$",
-    r"$\Gamma_F$",
     "Column 1",
     "Column 2",
     "Column 3",
     "Column 4",
     "Column 5",
     "Zoom region",
+    r"$\Gamma_{\mathrm{freeslip}}$",
+    r"$\Gamma_F$",
 ]
-plt.legend(lines, labels)
+plt.legend(patches, labels)
 plt.tight_layout()
 fname = "legend_domain"
 plt.savefig(os.path.join(plot_dir, fname + ".pdf"))

@@ -1,6 +1,7 @@
-from turbine_adapt import *
+from thetis import *
 from thetis.configuration import PositiveFloat, NonNegativeFloat, Bool
 from thetis.options import ModelOptions2d
+import numpy as np
 
 
 __all__ = ["FarmOptions"]

@@ -1,5 +1,8 @@
-from turbine_adapt import *
+from thetis import *
 from thetis.configuration import PositiveFloat, PositiveInteger
+from turbine_adapt.options import FarmOptions
+from pyroteus.utility import Mesh
+import numpy as np
 
 
 __all__ = ["ArrayOptions"]

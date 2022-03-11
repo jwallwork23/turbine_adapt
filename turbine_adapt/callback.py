@@ -1,4 +1,5 @@
-from turbine_adapt import *
+import thetis.turbines as turbines
+import numpy as np
 
 
 __all__ = ["PowerOutputCallback"]

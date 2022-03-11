@@ -1,4 +1,4 @@
-from turbine_adapt import *
+from pyroteus.thetis_compat import *
 
 
 class FarmSolver(FlowSolver2d):
@@ -7,10 +7,12 @@ class FarmSolver(FlowSolver2d):
     with more attributes than expected.
     """
 
-    def __init__(self, options, mesh=None):
+    @unfrozen
+    def __init__(self, options, mesh=None, keep_log=False):
         """
         :arg options: :class:`FarmOptions` parameter object
         :kwarg mesh: :class:`MeshGeometry` upon which to solve
+        :kwarg bool keep_log: append to existing log file or create a new one?
         """
         self._initialized = False
         self.options = options
@@ -32,4 +34,4 @@ class FarmSolver(FlowSolver2d):
         self.export_initial_state = True
         self.sediment_model = None
         self.bnd_functions = {"shallow_water": {}, "tracer": {}, "sediment": {}}
-        self._isfrozen = True
+        self.keep_log = keep_log
