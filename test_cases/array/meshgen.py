@@ -1,20 +1,19 @@
 from __future__ import absolute_import
-from turbine_adapt.parse import Parser, positive_int
-import os
+from turbine_adapt.parse import Parser, nonnegative_int
 from options import ArrayOptions
 
 
 # Parse for refinement level
 parser = Parser(prog="test_cases/array/meshgen.py")
 parser.add_argument(
-    "refinement_level",
-    help="Number of refinements of farm region",
-    type=positive_int,
-)
-parser.add_argument(
     "configuration",
     help="Name defining test case configuration",
     choices=["aligned", "staggered"],
+)
+parser.add_argument(
+    "refinement_level",
+    help="Number of refinements of farm region",
+    type=nonnegative_int,
 )
 parsed_args = parser.parse_args()
 level = int(parsed_args.refinement_level)
@@ -35,16 +34,20 @@ code = (
 
 # Domain and turbine specification
 op = ArrayOptions(meshgen=True)
-code += "// Domain and turbine specification\n"
-code += f"L = {op.domain_length:.0f};\n"
-code += f"W = {op.domain_width:.0f};\n"
-code += f"D = {op.turbine_diameter:.0f};\n"
-code += f"d = {op.turbine_width:.0f};\n"
-code += "deltax = 10*D;\ndeltay = 7.5*D;\n"
-code += "dx = 100;\n"
-dxfarm = [24, 12, 6, 5, 4, 3][level]
-code += f"dxfarm = {dxfarm:.1f};\n"
-code += f"dxturbine = {min(dxfarm, 6):.1f};\n"
+dxfarm = [48, 16, 5, 4.8, 3][level]
+dxelse = [200, 100, 100, 100, 100][level]
+code += f"""
+// Domain and turbine specification
+L = {op.domain_length};
+W = {op.domain_width};
+D = {op.turbine_diameter};
+d = {op.turbine_width};
+deltax = 10*D;
+deltay = 7.5*D;
+dx = {dxelse};
+dxfarm = {dxfarm};
+dxturbine = {min(dxfarm, 6)};
+"""
 
 # Channel geometry
 code += """
@@ -134,7 +137,5 @@ for surface in range(2, 17):
     code += surface_str % (surface, surface)
 
 # Write to file
-with open(
-    os.path.join(op.resource_dir, f"channel_box_{level}_{config}.geo"), "w+"
-) as f:
+with open(f"{op.resource_dir}/{config}/channel_box_{level}.geo", "w+") as f:
     f.write(code)

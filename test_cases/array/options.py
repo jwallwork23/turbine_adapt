@@ -39,8 +39,9 @@ class ArrayOptions(FarmOptions):
         # Domain and mesh
         if mesh is None:
             level = kwargs.get("level", 0)
-            fname = f"channel_box_{level}_{configuration}"
-            self.mesh_file = os.path.join(self.resource_dir, fname + ".msh")
+            self.mesh_file = (
+                f"{self.resource_dir}/{configuration}/channel_box_{level}.msh"
+            )
             if meshgen:
                 return
             elif os.path.exists(self.mesh_file):

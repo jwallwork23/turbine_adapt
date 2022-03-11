@@ -1,5 +1,6 @@
 all: dir clean mesh plot
 
+FIXED_MESHES	= 0 1 2 3 4
 
 # --- Setup
 
@@ -15,32 +16,39 @@ dir:
 mesh: aligned_mesh staggered_mesh
 
 aligned_mesh:
-	python3 meshgen.py 0 aligned
-	cd resources && gmsh -2 channel_box_0_aligned.geo
-	python3 meshgen.py 1 aligned
-	cd resources && gmsh -2 channel_box_1_aligned.geo
-	python3 meshgen.py 2 aligned
-	cd resources && gmsh -2 channel_box_2_aligned.geo
-	python3 meshgen.py 3 aligned
-	cd resources && gmsh -2 channel_box_3.geo
-	python3 meshgen.py 4 aligned
-	cd resources && gmsh -2 channel_box_4.geo
-	python3 meshgen.py 5 aligned
-	cd resources && gmsh -2 channel_box_5.geo
+	for level in $(FIXED_MESHES); do \
+		python3 meshgen.py aligned $$level; \
+	done
+	cd resources && make aligned_mesh
 
 staggered_mesh:
-	python3 meshgen.py 0 staggered
-	cd resources && gmsh -2 channel_box_0_staggered.geo
-	python3 meshgen.py 1 staggered
-	cd resources && gmsh -2 channel_box_1_staggered.geo
-	python3 meshgen.py 2 staggered
-	cd resources && gmsh -2 channel_box_2_staggered.geo
-	python3 meshgen.py 3 staggered
-	cd resources && gmsh -2 channel_box_3_staggered.geo
-	python3 meshgen.py 4 staggered
-	cd resources && gmsh -2 channel_box_4_staggered.geo
-	python3 meshgen.py 5 staggered
-	cd resources && gmsh -2 channel_box_5_staggered.geo
+	for level in $(FIXED_MESHES); do \
+		python3 meshgen.py staggered $$level; \
+	done
+	cd resources && make staggered_mesh
+
+
+# --- Runs
+
+ramp: ramp_aligned ramp_staggered
+
+ramp_aligned:
+	python3 ramp.py aligned --level 4
+
+ramp_staggered:
+	python3 ramp.py staggered --level 4
+
+fixed: fixed_aligned fixed_staggered
+
+fixed_aligned:
+	for level in $(FIXED_MESHES); do \
+		python3 run_fixed_mesh.py aligned --level $$level; \
+	done
+
+fixed_staggered:
+	for level in $(FIXED_MESHES); do \
+		python3 run_fixed_mesh.py staggered --level $$level; \
+	done
 
 
 # --- Plotting
@@ -52,18 +60,9 @@ plot_setup:
 	done
 
 plot_fixed_mesh:
-	for level in 0 1 2 3; do \
+	for level in $(FIXED_MESHES); do \
 		python3 plot_power.py -approach fixed_mesh -level $$level; \
 	done
-	python3 plot_energy.py -approach fixed_mesh
-	python3 plot_vorticity.py -approach fixed_mesh
-
-plot_adapt_vorticity:
-	for target in 500000 1000000 2000000 4000000; do \
-		python3 plot_power.py -approach vorticity -target $$target; \
-	done
-	python3 plot_energy.py -approach vorticity
-	python3 plot_vorticity.py -approach vorticity
 
 
 # --- Cleanup
