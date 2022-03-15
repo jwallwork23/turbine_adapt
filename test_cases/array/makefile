@@ -44,13 +44,13 @@ ramp:
 
 longrun:
 	for config in $(CONFIGS); do \
-		python3 run_fixed_mesh.py $$config --level 0 --num_tidal_cycles 3; \
+		python3 run_fixed_mesh.py $$config --level 0 --ramp_level 0 --num_tidal_cycles 3; \
 	done
 
 fixed_mesh:
 	for config in $(CONFIGS); do \
 		for level in $(FIXED_MESHES); do \
-			python3 run_fixed_mesh.py $$config --level $$level; \
+			python3 run_fixed_mesh.py $$config --level $$level --ramp_level $$level; \
 		done; \
 	done
 
