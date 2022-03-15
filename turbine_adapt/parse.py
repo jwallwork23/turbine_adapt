@@ -109,13 +109,13 @@ class Parser(argparse.ArgumentParser):
             default=0.005,
         )
 
-    def parse_approach(self):
+    def parse_approach(self, default="isotropic_dwr"):
         self.add_argument(
             "-a",
             "--approach",
             help="Adaptive approach to consider",
             choices=["fixed_mesh", "isotropic_dwr", "anisotropic_dwr"],
-            default="isotropic_dwr",
+            default=default,
         )
 
     def parse_indicator(self):
