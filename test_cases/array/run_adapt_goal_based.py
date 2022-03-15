@@ -26,7 +26,7 @@ ramp_level = parsed_args.ramp_level
 ramp_dir = f"outputs/{config}/fixed_mesh/level{ramp_level}/ramp"
 options = ArrayOptions(
     level=parsed_args.level,
-    staggered=config == "staggered",
+    configuration=config,
     ramp_level=ramp_level,
     ramp_dir=ramp_dir,
 )

@@ -7,6 +7,11 @@ pause_annotation()
 
 # Parse user input
 parser = Parser("test_cases/array/run_adapt_vorticity.py")
+parser.add_argument(
+    "config",
+    help="Name defining test case configuration",
+    choices=["aligned", "staggered"],
+)
 parser.parse_setup()
 parser.parse_convergence_criteria()
 parser.parse_metric_parameters()
@@ -14,7 +19,11 @@ parser.parse_loading()
 args = parser.parse_args()
 
 # Set parameters
-options = ArrayOptions(level=args.level)
+options = ArrayOptions(
+    level=args.level,
+    configuration=args.config,
+)
+raise NotImplementedError  # TODO: account for config
 options.create_tidal_farm()
 output_dir = os.path.join(
     options.output_directory, "vorticity", f"target{args.target:.0f}"
