@@ -22,9 +22,8 @@ config = parsed_args.configuration
 options = ArrayOptions(level=parsed_args.level, configuration=config)
 options.simulation_end_time = options.ramp_time
 options.create_tidal_farm()
-output_dir = os.path.join(
-    options.output_directory, config, "fixed_mesh", f"level{parsed_args.level}", "ramp"
-)
+output_dir = options.output_directory
+output_dir += f"/{config}/fixed_mesh/level{parsed_args.level}/ramp"
 options.output_directory = create_directory(output_dir)
 
 # Solve
@@ -51,6 +50,6 @@ solver_obj.iterate(
 
 # Store to checkpoint
 uv, elev = solver_obj.fields.solution_2d.split()
-with DumbCheckpoint(os.path.join(output_dir, "ramp"), mode=FILE_CREATE) as chk:
+with DumbCheckpoint(f"{output_dir}/ramp", mode=FILE_CREATE) as chk:
     chk.store(uv)
     chk.store(elev)
