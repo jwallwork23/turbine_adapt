@@ -5,6 +5,7 @@ FIXED_MESHES	= 0 1 2 3 4
 TARGETS			=
 # TODO: set target complexities
 
+.PHONY	:= plot_energy
 
 # --- Setup
 
@@ -41,6 +42,11 @@ ramp:
 		done; \
 	done
 
+longrun:
+	for config in $(CONFIGS); do \
+		python3 run_fixed_mesh.py $$config --level 0 --num_tidal_cycles 3; \
+	done
+
 fixed_mesh:
 	for config in $(CONFIGS); do \
 		for level in $(FIXED_MESHES); do \
@@ -70,6 +76,13 @@ plot_fixed_mesh:
 			for mode in ramp run both; do \
 				python3 plot_power.py $$config $$mode -a fixed_mesh --level $$level; \
 			done; \
+		done; \
+	done
+
+plot_energy:
+	for config in $(CONFIGS); do \
+		for mode in ramp run both; do \
+			python3 plot_energy.py $$config $$mode; \
 		done; \
 	done
 

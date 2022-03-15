@@ -18,10 +18,13 @@ parser.add_argument(
     choices=["run", "ramp", "both"],
     default="run",
 )
+parser.parse_setup()
 parsed_args = parser.parse_args()
 config = parsed_args.configuration
 mode = parsed_args.mode
 modes = ["ramp", "run"] if mode == "both" else [mode]
+end_time = parsed_args.end_time
+num_tidal_cycles = parsed_args.num_tidal_cycles
 
 
 def time_integrate(arr, dt=2.232):
@@ -54,15 +57,24 @@ for approach, levels in loops.items():
             raise NotImplementedError  # TODO: Read from log?
         output_dir = f"outputs/{config}/{approach}/level{level}"
         power = np.array([]).reshape((0, 15))
+        time = np.array([]).reshape((0, 1))
         for m in modes:
-            ramp = m == "ramp"
-            input_dir = output_dir + "/ramp" if ramp else output_dir
+            if end_time is None:
+                end_time = 0.0
+                if m != "ramp":
+                    end_time += num_tidal_cycles * options.tide_time
+                if m != "run":
+                    end_time += options.ramp_time
+            input_dir = output_dir + "/ramp" if m == "ramp" else output_dir
             fname = f"{input_dir}/diagnostic_turbine.hdf5"
             if not os.path.exists(fname):
                 print(f"{fname} does not exist")
                 continue
             with h5py.File(fname, "r") as h5:
                 power = np.concatenate((power, np.array(h5["current_power"])))
+                time = np.concatenate((time, np.array(h5["time"])))
+        power = power[time.flatten() <= end_time, :]
+        time = time[time <= end_time]
         power *= 1030.0 / 1.0e06  # MW
         energy = time_integrate(power) / 3600.0  # MWh
         for i in range(5):
