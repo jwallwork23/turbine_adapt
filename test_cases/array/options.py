@@ -39,6 +39,16 @@ class ArrayOptions(FarmOptions):
         self.use_automatic_timestep = kwargs.get("use_automatic_timestep", False)
         self.max_courant_number = kwargs.get("max_courant_number", 10)
 
+        # Temporal discretisation
+        self.timestep = 2.232
+        if self.use_automatic_timestep:
+            while self.courant_number > self.max_courant_number:
+                self.timestep /= 2
+        self.tide_time = 0.1 * self.M2_tide_period
+        self.ramp_time = self.tide_time
+        self.simulation_end_time = 2 * self.tide_time
+        self.simulation_export_time = 11.16
+
         # Domain and mesh
         if mesh is None:
             level = kwargs.get("level", 0)
@@ -75,16 +85,6 @@ class ArrayOptions(FarmOptions):
         self.use_grad_div_viscosity = False
         self.use_grad_depth_viscosity = True
         self.element_family = "dg-dg"
-
-        # Temporal discretisation
-        self.timestep = 2.232
-        if self.use_automatic_timestep:
-            while self.courant_number > self.max_courant_number:
-                self.timestep /= 2
-        self.tide_time = 0.1 * self.M2_tide_period
-        self.ramp_time = self.tide_time
-        self.simulation_end_time = 2 * self.tide_time
-        self.simulation_export_time = 11.16
 
         # Boundary forcing
         self.max_amplitude = 0.5
