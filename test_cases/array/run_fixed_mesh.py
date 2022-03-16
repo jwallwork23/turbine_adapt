@@ -72,3 +72,9 @@ options.apply_initial_conditions(solver_obj)
 solver_obj.iterate(
     update_forcings=options.update_forcings, export_func=options.export_func
 )
+
+# Store to checkpoint
+uv, elev = solver_obj.fields.solution_2d.split()
+with DumbCheckpoint(f"{output_dir}/end_state", mode=FILE_CREATE) as chk:
+    chk.store(uv)
+    chk.store(elev)
