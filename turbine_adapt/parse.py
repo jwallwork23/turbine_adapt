@@ -158,6 +158,12 @@ class Parser(argparse.ArgumentParser):
             default=100.0,
         )
         self.add_argument(
+            "--turbine_h_min",
+            help="Minimum metric magnitude inside turbine footprint",
+            type=positive_float,
+            default=0.1,
+        )
+        self.add_argument(
             "--turbine_h_max",
             help="Maximum metric magnitude inside turbine footprint",
             type=positive_float,

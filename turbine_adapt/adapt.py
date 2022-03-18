@@ -208,6 +208,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             "approach",
             "h_min",
             "h_max",
+            "turbine_h_min",
             "turbine_h_max",
             "target_complexity",
             "flux_form",
@@ -220,7 +221,9 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         end_time = options.simulation_end_time
         dt = options.timestep
         approach = parsed_args.approach.split("_")[0]
+        hmin = Constant(parsed_args.h_min)
         hmax = Constant(parsed_args.h_max)
+        turbine_hmin = Constant(parsed_args.turbine_h_min)
         turbine_hmax = Constant(parsed_args.turbine_h_max)
         target = (
             end_time / dt * parsed_args.target_complexity
@@ -463,16 +466,22 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             )
 
             # Enforce element constraints, accounting for turbines
+            h_min = []
             h_max = []
             for mesh in self.meshes:
-                expr = Constant(hmax)
+                P1 = FunctionSpace(mesh, "CG", 1)
+                hmin_expr = Constant(hmin)
+                hmax_expr = Constant(hmax)
                 P0 = FunctionSpace(mesh, "DG", 0)
                 for i, subdomain_id in enumerate(options.farm_ids):  # TODO: Use union
                     subset = mesh.cell_subset(subdomain_id)
-                    expr = expr + interpolate(turbine_hmax - hmax, P0, subset=subset)
-                hmax_func = interpolate(expr, FunctionSpace(mesh, "CG", 1))
+                    hmin_expr = hmin_expr + interpolate(turbine_hmin - hmin, P0, subset=subset)
+                    hmax_expr = hmax_expr + interpolate(turbine_hmax - hmax, P0, subset=subset)
+                hmin_func = interpolate(hmin_expr, P1)
+                hmax_func = interpolate(hmax_expr, P1)
+                h_min.append(hmin_func)
                 h_max.append(hmax_func)
-            metrics = enforce_element_constraints(metrics, parsed_args.h_min, h_max)
+            metrics = enforce_element_constraints(metrics, h_min, h_max)
             metrics = [RiemannianMetric(mesh, metric) for mesh, metric in zip(self.meshes, metrics)]
 
             # Plot metrics
