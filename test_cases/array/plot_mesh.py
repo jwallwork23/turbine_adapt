@@ -91,21 +91,25 @@ patch_kwargs["edgecolor"] = "gray"
 patch = ptch.Rectangle((-w / 2, -d / 2), w, d, **patch_kwargs)
 patches.append(patch)
 axes.add_patch(patch)
+lines = [Line2D([0], [0], color=c, linewidth=2, linestyle="-") for c in bnd_colours]
+axes.legend([lines[0]], [config.capitalize()], handlelength=0, handletextpad=0)
 plt.savefig(f"{plot_dir}/{config}_domain.pdf")
 
-plt.figure()
-plt.gca().axis(False)
-patches += [Line2D([0], [0], color=c, linewidth=2, linestyle="-") for c in bnd_colours]
-labels = [
-    "Column 1",
-    "Column 2",
-    "Column 3",
-    "Column 4",
-    "Column 5",
-    "Zoom region",
-    r"$\Gamma_{\mathrm{freeslip}}$",
-    r"$\Gamma_F$",
-]
-plt.legend(patches, labels)
-plt.tight_layout()
-plt.savefig(f"{plot_dir}/legend_domain.pdf")
+fname = f"{plot_dir}/legend_domain.pdf"
+if not os.path.exists(fname):
+    plt.figure()
+    plt.gca().axis(False)
+    patches += lines
+    labels = [
+        "Column 1",
+        "Column 2",
+        "Column 3",
+        "Column 4",
+        "Column 5",
+        "Zoom region",
+        r"$\Gamma_{\mathrm{freeslip}}$",
+        r"$\Gamma_F$",
+    ]
+    plt.legend(patches, labels)
+    plt.tight_layout()
+    plt.savefig(fname)
