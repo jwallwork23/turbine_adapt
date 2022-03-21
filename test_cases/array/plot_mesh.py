@@ -14,7 +14,7 @@ parser.add_argument(
 )
 parsed_args = parser.parse_args()
 config = parsed_args.configuration
-plot_dir = create_directory(os.path.join(os.path.dirname(__file__), "plots", config))
+plot_dir = create_directory(f"plots/{config}")
 kwargs = dict(interior_kw={"linewidth": 0.1}, boundary_kw={"color": "k"})
 patch_kwargs = dict(facecolor="none", linewidth=2)
 l = 15
@@ -71,6 +71,8 @@ kwargs["boundary_kw"]["colors"] = 2 * bnd_colours
 kwargs["boundary_kw"]["linewidths"] = 2.0
 triplot(options.mesh2d, axes=axes, **kwargs)
 axes.legend().remove()
+axes.set_xlabel(r"$x$-coordinate $[\mathrm m]$")
+axes.set_ylabel(r"$y$-coordinate $[\mathrm m]$")
 axes.set_xlim([-L / 2 - l, L / 2 + l])
 axes.set_ylim([-W / 2 - l, W / 2 + l])
 axes.set_yticks(np.linspace(-W / 2, W / 2, 5))
