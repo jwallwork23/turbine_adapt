@@ -66,7 +66,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         return {
             "swe2d": MixedFunctionSpace(
                 [
-                    VectorFunctionSpace(mesh, *uv, name="U_2d"),
+                    get_functionspace(mesh, *uv, name="U_2d", vector=True),
                     get_functionspace(mesh, *elev, name="H_2d"),
                 ]
             )
@@ -269,7 +269,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
             # Create metric Functions
             metrics = [
-                Function(TensorFunctionSpace(mesh, "CG", 1), name="Metric")
+                Function(get_functionspace(mesh, "CG", 1, tensor=True), name="Metric")
                 for mesh in self.meshes
             ]
 
@@ -469,10 +469,10 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             h_min = []
             h_max = []
             for mesh in self.meshes:
-                P1 = FunctionSpace(mesh, "CG", 1)
+                P1 = get_functionspace(mesh, "CG", 1)
                 hmin_expr = Constant(hmin)
                 hmax_expr = Constant(hmax)
-                P0 = FunctionSpace(mesh, "DG", 0)
+                P0 = get_functionspace(mesh, "DG", 0)
                 for i, subdomain_id in enumerate(options.farm_ids):  # TODO: Use union
                     subset = mesh.cell_subset(subdomain_id)
                     hmin_expr = hmin_expr + interpolate(turbine_hmin - hmin, P0, subset=subset)
