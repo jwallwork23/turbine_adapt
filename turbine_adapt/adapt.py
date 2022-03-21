@@ -15,15 +15,20 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
     adaptive simulations of tidal farm modelling problems.
     """
 
-    def __init__(self, options, root_dir, num_subintervals, qoi="energy"):
+    def __init__(self, options, root_dir, num_subintervals, **kwargs):
         """
         :arg options: :class:`FarmOptions` encapsulating the problem
         :arg root_dir: directory where metrics should be stored
+        :arg num_subintervals: number of subintervals to use in time
+        :kwarg qoi: the integrated quantity of choice
+        :kwarg qoi_farm_ids: tags for turbines that contribute towards
+            the QoI (defaults to the whole array)
         """
         self.options = options
         self.root_dir = root_dir
-        self.integrated_quantity = qoi
+        self.integrated_quantity = kwargs.get("qoi", "energy")
         self.keep_log = False
+        self.qoi_farm_ids = kwargs.get("qoi_farm_ids", options.array_ids)
 
         # Partition time interval
         dt = options.timestep
@@ -166,17 +171,24 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
     def get_qoi(self, i):
         """
-        Currently supported QoIs:
+        Extract a function for evaluating the quantity of interest (QoI) on
+        mesh `i` in the :class:`MeshSeq`.
 
-        * 'energy' - energy output of tidal farm.
+        Currently, the only supported QoI is the energy output. By default,
+        all turbines contribute to the QoI. However, this can be changed by
+        altering the `qoi_farm_ids` keyword argument when instantiating the
+        :class:`GoalOrientedTidalFarm` object.
         """
         if self.integrated_quantity == "energy":
             P0 = get_functionspace(self[i], "DG", 0)
-            turbine_drag = Constant(self.options.quadratic_drag_coefficient)
             ct = self.options.corrected_thrust_coefficient * Constant(pi / 8)
-            for subdomain_id in self.options.farm_ids:  # TODO: Use union
-                subset = self[i].cell_subset(subdomain_id)
-                turbine_drag = turbine_drag + interpolate(ct, P0, subset=subset)
+            turbine_drag = sum(
+                [
+                    interpolate(ct, P0, subset=self[i].cell_subset(tag))
+                    for tag in self.qoi_farm_ids.flatten()
+                ],
+                start=Constant(self.options.quadratic_drag_coefficient),
+            )
 
             def qoi(sol, t):
                 u, eta = sol["swe2d"].split()
