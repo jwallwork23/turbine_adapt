@@ -151,7 +151,7 @@ ymax = 40 if config == "aligned" else 60
 if mode == "both":
     axes.vlines(1, 0, ymax, "k")
     axes.vlines(1.5, 0, ymax, "k")
-axes.plot(time, np.sum(power, axis=1), **kw)
+axes.plot(time, np.sum(power, axis=1), label=config.capitalize(), **kw)
 h = 5 if config == "aligned" else 7.5
 for t, e in zip(energy_time, energy):
     axes.annotate(f"{e:.2f} MWh", (t, h), fontsize=10)
@@ -161,6 +161,7 @@ axes.set_xlim([ticks[0], ticks[-1]])
 axes.set_ylim([0, ymax])
 axes.set_xlabel(r"Time/$T_{\mathrm{tide}}$")
 axes.set_ylabel(r"Power output [$\mathrm{MW}$]")
+axes.legend(loc="upper left", handlelength=0, handletextpad=0, fancybox=True, fontsize=18)
 axes.grid(True)
 plt.tight_layout()
 plt.savefig(f"{plot_dir}/{config}_total_power_output_{run}_{mode}.pdf")
