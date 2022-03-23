@@ -1,6 +1,9 @@
 from turbine import *
 from options import ArrayOptions
+import pyadjoint
 
+
+pyadjoint.pause_annotation()
 
 # Parse arguments
 parser = Parser("test_cases/array/ramp.py")
