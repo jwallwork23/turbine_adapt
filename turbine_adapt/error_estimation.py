@@ -1,3 +1,4 @@
+from thetis import *
 from turbine_adapt import *
 
 
@@ -42,7 +43,7 @@ class ErrorEstimator(object):
         assert self.options.swe_timestepper_type in ("CrankNicolson", "SteadyState")
         self.steady = self.options.swe_timestepper_type == "SteadyState"
         self.theta = (
-            None if self.steady else self.options.timestepper_options.implicitness_theta
+            None if self.steady else self.options.swe_timestepper_options.implicitness_theta
         )
         self.eta_is_dg = self.options.element_family == "dg-dg"
 
