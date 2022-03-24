@@ -123,13 +123,17 @@ if combine_plots:
 axes.set_xlabel(r"Time/$T_{\mathrm{tide}}$")
 axes.set_ylabel(r"Power output [$\mathrm{MW}$]")
 axes.set_xticks(ticks)
+axes.set_yticks([5, 10, 15])
 axes.set_xlim([ticks[0], ticks[-1]])
-ymax = 40 if combine_plots else 15 if config == "aligned" else 18
+ymax = 40 if combine_plots else 15
 if mode == "both":
     axes.vlines(1, 0, ymax, "k")
     axes.vlines(1.5, 0, ymax, "k")
 axes.set_ylim([0, ymax])
 axes.grid(True)
+lines, labels = axes.get_legend_handles_labels()
+l = ["\n".join([config.capitalize(), "(fixed)" if approach == "fixed_mesh" else "(adaptive)"])]
+axes.legend(lines[:1], l, loc="upper right", handlelength=0, handletextpad=0, fontsize=18)
 plt.tight_layout()
 cmb = "_combined" if combine_plots else ""
 plt.savefig(f"{plot_dir}/{config}_power_output_column_{run}_{mode}{cmb}.pdf")
@@ -138,7 +142,6 @@ plt.savefig(f"{plot_dir}/{config}_power_output_column_{run}_{mode}{cmb}.pdf")
 fname = "plots/legend_column.pdf"
 if not os.path.exists(fname):
     fig2, axes2 = plt.subplots()
-    lines, labels = axes.get_legend_handles_labels()
     legend = axes2.legend(lines, labels, fontsize=18, frameon=False, ncol=5)
     fig2.canvas.draw()
     axes2.set_axis_off()
