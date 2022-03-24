@@ -288,9 +288,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                     else:
                         fname = f"{output_dir}/metric{i}_fp{fp_iteration}"
                     if os.path.exists(fname + ".h5"):
-                        print_output(
-                            f"\n--- Loading metric data on mesh {i+1}\n{fname}"
-                        )
+                        print_output(f"\n--- Loading metric on mesh {i+1}\n{fname}")
                         try:
                             with DumbCheckpoint(fname, mode=FILE_READ) as chk:
                                 chk.load(metric, name="Metric")
@@ -349,8 +347,6 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 outfiles.adjoint = File(f"{output_dir}/Adjoint2d.pvd")
 
                 # Construct metric
-                error_indicators = []
-                hessians = []
                 with pyadjoint.stop_annotating():
                     print_output(f"\n--- Error estimation {fp_iteration}\n")
                     for i, mesh in enumerate(self.meshes):
@@ -362,16 +358,9 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                         ee = ErrorEstimator(
                             options,
                             mesh=mesh,
+                            metric=approach,
                             error_estimator=parsed_args.error_indicator,
                         )
-                        error_indicators_step = [
-                            Function(ee.P0)
-                            for field in range(1 if approach == "isotropic" else 3)
-                        ]
-                        hessians_step = [
-                            Function(metric_fns[i])
-                            for field in range(0 if approach == "isotropic" else 3)
-                        ]
 
                         # Loop over all exported timesteps
                         N = len(solutions.swe2d.adjoint[i])
@@ -383,78 +372,19 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                             args = []
                             for f in outfiles:
                                 args.extend(solutions.swe2d[f][i][j].split())
-                                args[-2].rename(
-                                    "Adjoint velocity" if "adjoint" in f else "Velocity"
-                                )
-                                args[-1].rename(
-                                    "Adjoint elevation"
-                                    if "adjoint" in f
-                                    else "Elevation"
-                                )
+                                name = "adjoint " if "adjoint" in f else ""
+                                args[-2].rename((name + "velocity").capitalize())
+                                args[-1].rename((name + "elevation").capitalize())
                                 outfiles[f].write(*args[-2:])
 
-                            # Evaluate error indicator
-                            update_forcings(
-                                i * end_time / num_subintervals + dt * (j + 1)
-                            )
-                            if approach == "isotropic":
-                                _error_indicators_step = [
-                                    ee.error_indicator(
-                                        *args, flux_form=parsed_args.flux_form
-                                    )
-                                ]
-                                _hessians_step = []
-                            else:
-                                _error_indicators_step = ee.strong_residuals(*args[:4])
-                                _hessians_step = ee.recover_hessians(*args[6:])
-                                for _hessian_next, _hessian in zip(
-                                    ee.recover_hessians(*args[4:6]), _hessians_step
-                                ):
-                                    _hessian += _hessian_next
-                                    _hessian *= 0.5
+                            # Construct metric at current timestep
+                            t = i * end_time / num_subintervals + dt * (j + 1)
+                            update_forcings(t)
+                            metric_step = ee.metric(*args, **parsed_args)
 
                             # Apply trapezium rule
-                            if j in (0, N - 1):
-                                for _error_indicator in _error_indicators_step:
-                                    _error_indicator *= 0.5
-                                for _H_i in _hessians_step:
-                                    _H_i *= 0.5
-                            for error_indicator, _error_indicator in zip(
-                                error_indicators_step, _error_indicators_step
-                            ):
-                                _error_indicator *= dt
-                                error_indicator += _error_indicator
-                            for hessian, _hessian in zip(hessians_step, _hessians_step):
-                                _hessian *= dt
-                                hessian += _hessian
-                        error_indicators.append(error_indicators_step)
-                        hessians.append(hessians_step)
-
-                    # Plot error indicators
-                    if approach == "isotropic":
-                        outfiles.error = File(f"{output_dir}/Indicator2d.pvd")
-                        for error_indicator in error_indicators:
-                            error_indicator[0].rename("Error indicator")
-                            outfiles.error.write(error_indicator[0])
-
-                    # Construct metrics
-                    for i, error_indicator in enumerate(error_indicators):
-                        if approach == "isotropic":
-                            metrics[i].assign(
-                                isotropic_metric(
-                                    error_indicator[0],
-                                    target_space=metrics[i].function_space,
-                                )
-                            )
-                        else:
-                            metrics[i].assign(
-                                anisotropic_metric(
-                                    error_indicator,
-                                    hessians[i],
-                                    element_wise=False,
-                                    target_space=metrics[i].function_space,
-                                )
-                            )
+                            metric_step *= 0.5 * dt if j in (0, N - 1) else dt
+                            metric_fns[i] += metric_step
 
                         # Stash metric data
                         print_output(f"\n--- Storing metric data on mesh {i+1}\n")
