@@ -42,9 +42,8 @@ class ErrorEstimator(object):
         # Discretisation parameters
         assert self.options.swe_timestepper_type in ("CrankNicolson", "SteadyState")
         self.steady = self.options.swe_timestepper_type == "SteadyState"
-        self.theta = (
-            None if self.steady else self.options.swe_timestepper_options.implicitness_theta
-        )
+        theta = self.options.swe_timestepper_options.implicitness_theta
+        self.theta = None if self.steady else theta
         self.eta_is_dg = self.options.element_family == "dg-dg"
 
         # Get turbine drag coefficient
@@ -116,32 +115,30 @@ class ErrorEstimator(object):
 
     def _psi_u_steady(self, *args):
         if self.steady:
-            assert len(args) == 4
-            uv, elev, uv_star, elev_star = args
+            assert len(args) == 2
+            uv, elev = args
             uv_old, elev_old = uv, elev
         else:
-            assert len(args) == 6
-            uv, elev, uv_old, elev_old, uv_star, elev_star = args
+            assert len(args) == 4
+            uv, elev, uv_old, elev_old = args
         psi = Function(self.P0)
         H = self.options.bathymetry2d + elev
         H_old = self.options.bathymetry2d + elev_old
         g = physical_constants["g_grav"]
-        flux_terms = 0
-        ibp_terms = 0
-        if self.eta_is_dg:
-
-            # External pressure gradient
-            head_star = avg(elev_old) + sqrt(avg(H) / g) * jump(uv, self.n)
-            flux_terms += -head_star * g
-            ibp_terms += g * elev * self.n[0]
 
         # Advection
-        flux_terms += avg(uv_old[0]) * jump(uv, self.n)
-        ibp_terms += uv[0] * dot(uv, self.n)
+        flux_terms = avg(uv_old[0]) * jump(uv, self.n)
+        ibp_terms = self._restrict(uv[0] * dot(uv, self.n)) * self.dS
         uv_lax_friedrichs = self.options.lax_friedrichs_velocity_scaling_factor
         if self.options.use_lax_friedrichs_velocity:
             gamma = 0.5 * abs(dot(avg(uv_old), self.n("-"))) * uv_lax_friedrichs
             flux_terms += gamma * jump(uv[0])
+
+        # External pressure gradient
+        if self.eta_is_dg:
+            head_star = avg(elev_old) + sqrt(avg(H) / g) * jump(uv, self.n)
+            flux_terms += -head_star * g
+            ibp_terms += self._restrict(g * elev * self.n[0]) * self.dS
 
         # Viscosity
         p = self.options.polynomial_degree
@@ -211,11 +208,18 @@ class ErrorEstimator(object):
 
         # Compute flux norm
         mass_term = self.p0test * self.p0trial * self.dx
-        ibp_terms = self._restrict(ibp_terms) * self.dS
-        flux_terms = self._restrict(flux_terms) * self.dS
-        bnd_terms = sum(
-            [self._restrict(term) * ds_bnd for ds_bnd, term in bnd_terms.items()]
-        )
+        if self.norm_type == "L1":
+            flux_terms = 2 * avg(self.p0test) * abs(flux_terms) * self.dS
+            bnd_terms = sum(
+                self.p0test * abs(term) * ds_bnd for ds_bnd, term in bnd_terms.items()
+            )
+        elif self.norm_type == "L2":
+            flux_terms = 2 * avg(self.p0test) * flux_terms * flux_terms * self.dS
+            bnd_terms = sum(
+                self.p0test * term * term * ds_bnd for ds_bnd, term in bnd_terms.items()
+            )
+        else:
+            raise NotImplementedError
         sp = {
             "snes_type": "ksponly",
             "ksp_type": "preonly",
@@ -229,31 +233,29 @@ class ErrorEstimator(object):
 
     def _psi_v_steady(self, *args):
         if self.steady:
-            assert len(args) == 4
-            uv, elev, uv_star, elev_star = args
+            assert len(args) == 2
+            uv, elev = args
             uv_old, elev_old = uv, elev
         else:
-            assert len(args) == 6
-            uv, elev, uv_old, elev_old, uv_star, elev_star = args
+            assert len(args) == 4
+            uv, elev, uv_old, elev_old = args
         psi = Function(self.P0)
         H = self.options.bathymetry2d + elev_old
         g = physical_constants["g_grav"]
-        flux_terms = 0
-        ibp_terms = 0
-        if self.eta_is_dg:
-
-            # External pressure gradient
-            head_star = avg(elev_old) + sqrt(avg(H) / g) * jump(uv, self.n)
-            flux_terms += -head_star * g
-            ibp_terms += g * elev * self.n[1]
 
         # Advection
-        flux_terms += avg(uv[1]) * jump(uv, self.n)
-        ibp_terms += uv[1] * dot(uv, self.n)
+        flux_terms = avg(uv[1]) * jump(uv, self.n)
+        ibp_terms = self._restrict(uv[1] * dot(uv, self.n)) * self.dS
         uv_lax_friedrichs = self.options.lax_friedrichs_velocity_scaling_factor
         if self.options.use_lax_friedrichs_velocity:
             gamma = 0.5 * abs(dot(avg(uv_old), self.n("-"))) * uv_lax_friedrichs
             flux_terms += gamma * jump(uv[1])
+
+        # External pressure gradient
+        if self.eta_is_dg:
+            head_star = avg(elev_old) + sqrt(avg(H) / g) * jump(uv, self.n)
+            flux_terms += -head_star * g
+            ibp_terms += self._restrict(g * elev * self.n[1]) * self.dS
 
         # Viscosity
         p = self.options.polynomial_degree
@@ -323,11 +325,18 @@ class ErrorEstimator(object):
 
         # Compute flux norm
         mass_term = self.p0test * self.p0trial * self.dx
-        ibp_terms = self._restrict(ibp_terms) * self.dS
-        flux_terms = self._restrict(flux_terms) * self.dS
-        bnd_terms = sum(
-            [self._restrict(term) * ds_bnd for ds_bnd, term in bnd_terms.items()]
-        )
+        if self.norm_type == "L1":
+            flux_terms = 2 * avg(self.p0test) * abs(flux_terms) * self.dS
+            bnd_terms = sum(
+                self.p0test * abs(term) * ds_bnd for ds_bnd, term in bnd_terms.items()
+            )
+        elif self.norm_type == "L2":
+            flux_terms = 2 * avg(self.p0test) * flux_terms * flux_terms * self.dS
+            bnd_terms = sum(
+                self.p0test * term * term * ds_bnd for ds_bnd, term in bnd_terms.items()
+            )
+        else:
+            raise NotImplementedError
         sp = {
             "snes_type": "ksponly",
             "ksp_type": "preonly",
@@ -341,12 +350,12 @@ class ErrorEstimator(object):
 
     def _psi_eta_steady(self, *args):
         if self.steady:
-            assert len(args) == 4
-            uv, elev, uv_star, elev_star = args
+            assert len(args) == 2
+            uv, elev = args
             uv_old, elev_old = uv, elev
         else:
-            assert len(args) == 6
-            uv, elev, uv_old, elev_old, uv_star, elev_star = args
+            assert len(args) == 4
+            uv, elev, uv_old, elev_old = args
         psi = Function(self.P0)
         b = self.options.bathymetry2d
         H = b + elev_old
@@ -354,7 +363,7 @@ class ErrorEstimator(object):
         flux_terms = 0
 
         # HUDiv
-        ibp_terms = inner(H * uv, self.n)
+        ibp_terms = self._restrict(inner(H * uv, self.n)) * dS
         if self.eta_is_dg:
             un_rie = avg(dot(uv, self.n)) + sqrt(g / avg(H)) * jump(
                 elev * self.n, self.n
@@ -383,11 +392,18 @@ class ErrorEstimator(object):
 
         # Compute flux norm
         mass_term = self.p0test * self.p0trial * self.dx
-        ibp_terms = self._restrict(ibp_terms) * self.dS
-        flux_terms = self._restrict(flux_terms) * self.dS
-        bnd_terms = sum(
-            [self._restrict(term) * ds_bnd for ds_bnd, term in bnd_terms.items()]
-        )
+        if self.norm_type == "L1":
+            flux_terms = 2 * avg(self.p0test) * abs(flux_terms) * self.dS
+            bnd_terms = sum(
+                self.p0test * abs(term) * ds_bnd for ds_bnd, term in bnd_terms.items()
+            )
+        elif self.norm_type == "L2":
+            flux_terms = 2 * avg(self.p0test) * flux_terms * flux_terms * self.dS
+            bnd_terms = sum(
+                self.p0test * term * term * ds_bnd for ds_bnd, term in bnd_terms.items()
+            )
+        else:
+            raise NotImplementedError
         sp = {
             "snes_type": "ksponly",
             "ksp_type": "preonly",
@@ -417,61 +433,19 @@ class ErrorEstimator(object):
         f_old = self._Psi_eta_steady(uv_old, elev_old)
         return f_time + self.theta * f + (1 - self.theta) * f_old
 
-    def _psi_u_unsteady(
-        self,
-        uv,
-        elev,
-        uv_old,
-        elev_old,
-        uv_star,
-        elev_star,
-        uv_star_next,
-        elev_star_next,
-    ):
-        f = self._psi_u_steady(
-            uv, elev, uv, elev, uv_star_next, elev_star_next
-        )  # NOTE: Not semi-implicit
-        f_old = self._psi_u_steady(
-            uv_old, elev_old, uv_old, elev_old, uv_star, elev_star
-        )
+    def _psi_u_unsteady(self, uv, elev, uv_old, elev_old):
+        f = self._psi_u_steady(uv, elev, uv, elev)  # NOTE: Not semi-implicit
+        f_old = self._psi_u_steady(uv_old, elev_old, uv_old, elev_old)
         return self.theta * f + (1 - self.theta) * f_old
 
-    def _psi_v_unsteady(
-        self,
-        uv,
-        elev,
-        uv_old,
-        elev_old,
-        uv_star,
-        elev_star,
-        uv_star_next,
-        elev_star_next,
-    ):
-        f = self._psi_v_steady(
-            uv, elev, uv, elev, uv_star_next, elev_star_next
-        )  # NOTE: Not semi-implicit
-        f_old = self._psi_v_steady(
-            uv_old, elev_old, uv_old, elev_old, uv_star, elev_star
-        )
+    def _psi_v_unsteady(self, uv, elev, uv_old, elev_old):
+        f = self._psi_v_steady(uv, elev, uv, elev)  # NOTE: Not semi-implicit
+        f_old = self._psi_v_steady(uv_old, elev_old, uv_old, elev_old)
         return self.theta * f + (1 - self.theta) * f_old
 
-    def _psi_eta_unsteady(
-        self,
-        uv,
-        elev,
-        uv_old,
-        elev_old,
-        uv_star,
-        elev_star,
-        uv_star_next,
-        elev_star_next,
-    ):
-        f = self._psi_eta_steady(
-            uv, elev, uv, elev, uv_star_next, elev_star_next
-        )  # NOTE: Not semi-implicit
-        f_old = self._psi_eta_steady(
-            uv_old, elev_old, uv_old, elev_old, uv_star, elev_star
-        )
+    def _psi_eta_unsteady(self, uv, elev, uv_old, elev_old):
+        f = self._psi_eta_steady(uv, elev, uv, elev)  # NOTE: Not semi-implicit
+        f_old = self._psi_eta_steady(uv_old, elev_old, uv_old, elev_old)
         return self.theta * f + (1 - self.theta) * f_old
 
     def strong_residuals(self, *args):
@@ -480,13 +454,13 @@ class ErrorEstimator(object):
         timestep.
         """
         nargs = len(args)
-        assert nargs == 4 if self.steady else 8
+        assert nargs == 2 if self.steady else 4
         if self.steady:
-            Psi_uv = self._Psi_uv_steady(*args[: nargs // 2])
-            Psi_eta = self._Psi_eta_steady(*args[: nargs // 2])
+            Psi_uv = self._Psi_uv_steady(*args)
+            Psi_eta = self._Psi_eta_steady(*args)
         else:
-            Psi_uv = self._Psi_uv_unsteady(*args[: nargs // 2])
-            Psi_eta = self._Psi_eta_unsteady(*args[: nargs // 2])
+            Psi_uv = self._Psi_uv_unsteady(*args)
+            Psi_eta = self._Psi_eta_unsteady(*args)
         if self.norm_type == "L1":
             return [
                 assemble(self.p0test * abs(Psi_uv[0]) * self.dx),
@@ -571,16 +545,18 @@ class ErrorEstimator(object):
         """
         nargs = len(args)
         assert nargs == 4 if self.steady else 8
+        nargs2 = nargs // 2
+        nargs22 = 2 + nargs2
 
         # Terms for standard a posteriori error estimate
-        self.residuals = self.strong_residuals(*args)
-        self.fluxes = self.flux_terms(*args)
+        self.residuals = self.strong_residuals(*args[:nargs2])
+        self.fluxes = self.flux_terms(*args[:nargs2])
 
         # Weighting term for the adjoint
         if flux_form:
-            self.weights = self.flux_terms(*args)
+            self.weights = self.flux_terms(*args[nargs2:])
         else:
-            self.weights = self.recover_laplacians(*args[nargs // 2 : 2 + nargs // 2])
+            self.weights = self.recover_laplacians(*args[nargs2:nargs22])
             if not self.steady:  # Average recovered Laplacians
                 for R, R_old in zip(self.weights, self.recover_laplacians(*args[-2:])):
                     R += R_old
@@ -609,16 +585,18 @@ class ErrorEstimator(object):
             flux_form = kwargs.get("flux_form", False)
             nargs = len(args)
             assert nargs == 4 if self.steady else 8
+            nargs2 = nargs // 2
+            nargs22 = 2 + nargs2
 
             # Terms for standard a posteriori error estimate
-            Psi = self.strong_residuals(*args)
-            psi = self.flux_terms(*args)
+            Psi = self.strong_residuals(*args[:nargs2])
+            psi = self.flux_terms(*args[:nargs2])
 
             # Weighting term for the adjoint
             if flux_form:
                 raise ValueError("Flux form is incompatible with WH.")
             else:
-                H = self.recover_hessians(*args[nargs // 2 : 2 + nargs // 2])
+                H = self.recover_hessians(*args[nargs2:nargs22])
                 if not self.steady:  # Average recovered Hessians
                     for H_i, H_old_i in zip(H, self.recover_hessians(*args[-2:])):
                         H_i += H_old_i
