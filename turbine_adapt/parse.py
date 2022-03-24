@@ -62,7 +62,7 @@ class Parser(argparse.ArgumentParser):
             "--ramp_level",
             help="Resolution level of spin-up run",
             type=nonnegative_int,
-            default=5,
+            default=4,
         )
         self.add_argument(
             "--end_time",
