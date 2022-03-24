@@ -169,6 +169,12 @@ class Parser(argparse.ArgumentParser):
             type=positive_float,
             default=2.0,
         )
+        self.add_argument(
+            "--a_max",
+            help="Maximum aspect ratio",
+            type=positive_float,
+            default=10000.0,
+        )
 
     def parse_plotting(self):
         self.add_argument(
