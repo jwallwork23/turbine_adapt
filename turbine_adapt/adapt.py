@@ -222,6 +222,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             "h_max",
             "turbine_h_min",
             "turbine_h_max",
+            "a_max",
             "target_complexity",
             "flux_form",
             "norm_order",
@@ -233,10 +234,12 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         end_time = options.simulation_end_time
         dt = options.timestep
         approach = parsed_args.approach.split("_")[0]
-        hmin = Constant(parsed_args.h_min)
-        hmax = Constant(parsed_args.h_max)
-        turbine_hmin = Constant(parsed_args.turbine_h_min)
-        turbine_hmax = Constant(parsed_args.turbine_h_max)
+        P0 = get_functionspace(options.mesh2d, "DG", 0)
+        h_min = parsed_args.h_min
+        h_max = parsed_args.h_max
+        turbine_h_min = parsed_args.turbine_h_min
+        turbine_h_max = parsed_args.turbine_h_max
+        a_max = parsed_args.a_max
         target = (
             end_time / dt * parsed_args.target_complexity
         )  # Convert to space-time complexity
@@ -279,16 +282,14 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                     plex.createFromFile(mesh_fname + ".h5")
                     self.meshes[i] = Mesh(plex)
 
-            # Create metric Functions
-            metrics = [
-                Function(get_functionspace(mesh, "CG", 1, tensor=True), name="Metric")
-                for mesh in self.meshes
-            ]
+            # Create metrics
+            metrics = [RiemannianMetric(mesh) for mesh in self.meshes]
+            metric_fns = [metric.function for metric in metrics]
 
             # Load metric data, if available
             loaded = False
             if fp_iteration == load_index:
-                for i, metric in enumerate(metrics):
+                for i, metric in enumerate(metric_fns):
                     if load_index == 0:
                         metric_fname = os.path.join(self.root_dir, f"metric{i}")
                     else:
@@ -379,7 +380,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                             for field in range(1 if approach == "isotropic" else 3)
                         ]
                         hessians_step = [
-                            Function(metrics[i])
+                            Function(metric_fns[i])
                             for field in range(0 if approach == "isotropic" else 3)
                         ]
 
@@ -452,11 +453,19 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                     # Construct metrics
                     for i, error_indicator in enumerate(error_indicators):
                         if approach == "isotropic":
-                            metrics[i].assign(isotropic_metric(error_indicator[0]))
+                            metrics[i].assign(
+                                isotropic_metric(
+                                    error_indicator[0],
+                                    target_space=metrics[i].function_space,
+                                )
+                            )
                         else:
                             metrics[i].assign(
                                 anisotropic_metric(
-                                    error_indicator, hessians[i], element_wise=False
+                                    error_indicator,
+                                    hessians[i],
+                                    element_wise=False,
+                                    target_space=metrics[i].function_space,
                                 )
                             )
 
@@ -465,41 +474,36 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                             output_dir, f"metric{i}_fp{fp_iteration}"
                         )
                         with DumbCheckpoint(metric_fname, mode=FILE_CREATE) as chk:
-                            chk.store(metrics[i], name="Metric")
+                            chk.store(metric_fns[i], name="Metric")
                         if fp_iteration == 0:
                             metric_fname = os.path.join(self.root_dir, f"metric{i}")
                             with DumbCheckpoint(metric_fname, mode=FILE_CREATE) as chk:
-                                chk.store(metrics[i], name="Metric")
+                                chk.store(metric_fns[i], name="Metric")
 
             # Process metrics
             print_output(f"\n--- Metric processing {fp_iteration}\n")
-            metrics = space_time_normalise(
-                metrics, end_time, timesteps, target, parsed_args.norm_order
+            space_time_normalise(
+                metric_fns, end_time, timesteps, target, parsed_args.norm_order
             )
 
             # Enforce element constraints, accounting for turbines
-            h_min = []
-            h_max = []
+            hmins = []
+            hmaxs = []
             for mesh in self.meshes:
-                P1 = get_functionspace(mesh, "CG", 1)
-                hmin_expr = Constant(hmin)
-                hmax_expr = Constant(hmax)
                 P0 = get_functionspace(mesh, "DG", 0)
-                for i, subdomain_id in enumerate(options.farm_ids):  # TODO: Use union
+                hmin = Function(P0).assign(h_min)
+                hmax = Function(P0).assign(h_max)
+                for i, subdomain_id in enumerate(options.farm_ids):
                     subset = mesh.cell_subset(subdomain_id)
-                    hmin_expr = hmin_expr + interpolate(turbine_hmin - hmin, P0, subset=subset)
-                    hmax_expr = hmax_expr + interpolate(turbine_hmax - hmax, P0, subset=subset)
-                hmin_func = interpolate(hmin_expr, P1)
-                hmax_func = interpolate(hmax_expr, P1)
-                h_min.append(hmin_func)
-                h_max.append(hmax_func)
-            metrics = enforce_element_constraints(metrics, h_min, h_max)
-            metrics = [RiemannianMetric(mesh, metric) for mesh, metric in zip(self.meshes, metrics)]
+                    hmin.assign(turbine_h_min, subset=subset)
+                    hmax.assign(turbine_h_max, subset=subset)
+                hmins.append(hmin)
+                hmaxs.append(hmax)
+            enforce_element_constraints(metric_fns, hmins, hmaxs, a_max)
 
             # Plot metrics
             outfiles.metric = File(os.path.join(output_dir, "Metric2d.pvd"))
-            for metric in metrics:
-                metric.rename("Metric")
+            for metric in metric_fns:
                 outfiles.metric.write(metric)
 
             # Adapt meshes
@@ -534,4 +538,6 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
             # Increment
             fp_iteration += 1
-        print_output(f"Converged in {fp_iteration+1} iterations due to {converged_reason}")
+        print_output(
+            f"Converged in {fp_iteration+1} iterations due to {converged_reason}"
+        )
