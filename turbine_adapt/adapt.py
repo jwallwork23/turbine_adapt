@@ -219,6 +219,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             "turbine_h_max",
             "a_max",
             "target_complexity",
+            "base_complexity",
             "flux_form",
             "norm_order",
         }
@@ -234,9 +235,9 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         turbine_h_min = parsed_args.turbine_h_min
         turbine_h_max = parsed_args.turbine_h_max
         a_max = parsed_args.a_max
-        target = (
-            end_time / dt * parsed_args.target_complexity
-        )  # Convert to space-time complexity
+        num_timesteps = int(np.round(end_time / dt))
+        target = num_timesteps * parsed_args.target_complexity
+        base = num_timesteps * parsed_args.base_complexity
         num_subintervals = self.num_subintervals
         timesteps = [dt] * num_subintervals
         p = parsed_args.norm_order
@@ -263,6 +264,9 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 converged = True
                 if converged_reason is None:
                     converged_reason = "maximum number of iterations reached"
+
+            # Ramp up the target complexity
+            target_ramp = ramp_complexity(base, target, fp_iteration)
 
             # Load meshes, if requested
             if load_index > 0 and fp_iteration == load_index:
@@ -398,7 +402,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
             # Apply space-time normalisation
             print_output(f"\n--- Metric processing {fp_iteration}\n")
-            space_time_normalise(metric_fns, end_time, timesteps, target, p)
+            space_time_normalise(metric_fns, end_time, timesteps, target_ramp, p)
 
             # Enforce element constraints, accounting for turbines
             hmins = []

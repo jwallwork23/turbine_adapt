@@ -140,6 +140,12 @@ class Parser(argparse.ArgumentParser):
             default=10000.0,
         )
         self.add_argument(
+            "--base_complexity",
+            help="Base metric complexity",
+            type=positive_float,
+            default=1000.0,
+        )
+        self.add_argument(
             "--norm_order",
             help="Order p for L^p normalisation",
             type=bounded_float(1.0, np.inf),
