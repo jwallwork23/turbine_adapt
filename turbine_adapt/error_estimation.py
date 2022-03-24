@@ -11,6 +11,7 @@ class ErrorEstimator(object):
     turbine modelling applications.
     """
 
+    @PETSc.Log.EventDecorator("ErrorEstimator.__init__")
     def __init__(
         self,
         options,
@@ -25,6 +26,7 @@ class ErrorEstimator(object):
         :kwarg mesh: the mesh
         :kwarg norm_type: norm type for error estimator
         :kwarg error_estimator: error estimator type
+        :kwarg metric: metric type
         :kwarg boundary: should boundary contributions be considered?
         """
         self.options = options
@@ -66,6 +68,13 @@ class ErrorEstimator(object):
         self.boundary = boundary
 
     def _Psi_uv_steady(self, uv, elev):
+        """
+        Strong residual for the velocity component
+        in steady state mode.
+
+        :arg uv: velocity field
+        :arg elev: elevation field
+        """
         H = self.options.bathymetry2d + elev
         g = physical_constants["g_grav"]
         nu = self.options.horizontal_viscosity
@@ -75,16 +84,43 @@ class ErrorEstimator(object):
         return adv + g * grad(elev) + Cd * sqrt(inner(uv, uv)) * uv / H - vis
 
     def _Psi_u_steady(self, uv, elev):
+        """
+        Strong residual for the x-velocity component
+        in steady state mode.
+
+        :arg uv: velocity field
+        :arg elev: elevation field
+        """
         return self._Psi_uv_steady(uv, elev)[0]
 
     def _Psi_v_steady(self, uv, elev):
+        """
+        Strong residual for the y-velocity component
+        in steady state mode.
+
+        :arg uv: velocity field
+        :arg elev: elevation field
+        """
         return self._Psi_uv_steady(uv, elev)[1]
 
     def _Psi_eta_steady(self, uv, elev):
+        """
+        Strong residual for the free surface elevation
+        component in steady state mode.
+
+        :arg uv: velocity field
+        :arg elev: elevation field
+        """
         H = self.options.bathymetry2d + elev
         return div(H * uv)
 
     def _restrict(self, v):
+        """
+        Restrict an expression `v` over facets, according
+        to the :attr:`norm_type`.
+
+        :arg v: the UFL expression
+        """
         if self.norm_type == "L1":
             return jump(abs(v), self.p0test)
         elif self.norm_type == "L2":
@@ -93,6 +129,13 @@ class ErrorEstimator(object):
             raise NotImplementedError
 
     def _get_bnd_functions(self, eta_in, uv_in, bnd_in):
+        """
+        Get boundary contributions on segment `bnd_in`.
+
+        :arg eta_in: the current elevation
+        :arg uv_in: the current velocity
+        :arg bnd_in: the boundary marker
+        """
         funcs = self.options.bnd_conditions.get(bnd_in)
         if "elev" in funcs and "uv" in funcs:
             eta_ext = funcs["elev"]
@@ -114,6 +157,10 @@ class ErrorEstimator(object):
         return eta_ext, uv_ext
 
     def _psi_u_steady(self, *args):
+        """
+        Inter-element flux contributions from the x-velocity
+        component for steady-state mode.
+        """
         if self.steady:
             assert len(args) == 2
             uv, elev = args
@@ -232,6 +279,10 @@ class ErrorEstimator(object):
         return sqrt(psi) if self.norm_type == "L2" else psi
 
     def _psi_v_steady(self, *args):
+        """
+        Inter-element flux contributions from the y-velocity
+        component for steady-state mode.
+        """
         if self.steady:
             assert len(args) == 2
             uv, elev = args
@@ -349,6 +400,10 @@ class ErrorEstimator(object):
         return sqrt(psi) if self.norm_type == "L2" else psi
 
     def _psi_eta_steady(self, *args):
+        """
+        Inter-element flux contributions from the free surface
+        elevation component for steady-state mode.
+        """
         if self.steady:
             assert len(args) == 2
             uv, elev = args
@@ -416,42 +471,107 @@ class ErrorEstimator(object):
         return sqrt(psi) if self.norm_type == "L2" else psi
 
     def _Psi_uv_unsteady(self, uv, elev, uv_old, elev_old):
+        """
+        Strong residual for the velocity component
+        in unsteady mode.
+
+        :arg uv: velocity field at current timestep
+        :arg elev: elevation field at current timestep
+        :arg uv_old: velocity field at previous timestep
+        :arg elev_old: elevation field at previous timestep
+        """
         f_time = (uv - uv_old) / self.options.timestep
         f = self._Psi_uv_steady(uv, elev)
         f_old = self._Psi_uv_steady(uv_old, elev_old)
         return f_time + self.theta * f + (1 - self.theta) * f_old
 
     def _Psi_u_unsteady(self, *args):
+        """
+        Strong residual for the x-velocity component
+        in unsteady mode.
+
+        :arg uv: velocity field at current timestep
+        :arg elev: elevation field at current timestep
+        :arg uv_old: velocity field at previous timestep
+        :arg elev_old: elevation field at previous timestep
+        """
         return self._Psi_uv_unsteady(*args)[0]
 
     def _Psi_v_unsteady(self, *args):
+        """
+        Strong residual for the y-velocity component
+        in unsteady mode.
+
+        :arg uv: velocity field at current timestep
+        :arg elev: elevation field at current timestep
+        :arg uv_old: velocity field at previous timestep
+        :arg elev_old: elevation field at previous timestep
+        """
         return self._Psi_uv_unsteady(*args)[1]
 
     def _Psi_eta_unsteady(self, uv, elev, uv_old, elev_old):
+        """
+        Strong residual for the free surface elevation
+        component in unsteady mode.
+
+        :arg uv: velocity field at current timestep
+        :arg elev: elevation field at current timestep
+        :arg uv_old: velocity field at previous timestep
+        :arg elev_old: elevation field at previous timestep
+        """
         f_time = (elev - elev_old) / self.options.timestep
         f = self._Psi_eta_steady(uv, elev)
         f_old = self._Psi_eta_steady(uv_old, elev_old)
         return f_time + self.theta * f + (1 - self.theta) * f_old
 
     def _psi_u_unsteady(self, uv, elev, uv_old, elev_old):
+        """
+        Inter-element flux terms for the x-velocity component
+        in unsteady mode.
+
+        :arg uv: velocity field at current timestep
+        :arg elev: elevation field at current timestep
+        :arg uv_old: velocity field at previous timestep
+        :arg elev_old: elevation field at previous timestep
+        """
         f = self._psi_u_steady(uv, elev, uv, elev)  # NOTE: Not semi-implicit
         f_old = self._psi_u_steady(uv_old, elev_old, uv_old, elev_old)
         return self.theta * f + (1 - self.theta) * f_old
 
     def _psi_v_unsteady(self, uv, elev, uv_old, elev_old):
+        """
+        Inter-element flux terms for the y-velocity component
+        in unsteady mode.
+
+        :arg uv: velocity field at current timestep
+        :arg elev: elevation field at current timestep
+        :arg uv_old: velocity field at previous timestep
+        :arg elev_old: elevation field at previous timestep
+        """
         f = self._psi_v_steady(uv, elev, uv, elev)  # NOTE: Not semi-implicit
         f_old = self._psi_v_steady(uv_old, elev_old, uv_old, elev_old)
         return self.theta * f + (1 - self.theta) * f_old
 
     def _psi_eta_unsteady(self, uv, elev, uv_old, elev_old):
+        """
+        Inter-element flux terms for the free surface elevation
+        component in unsteady mode.
+
+        :arg uv: velocity field at current timestep
+        :arg elev: elevation field at current timestep
+        :arg uv_old: velocity field at previous timestep
+        :arg elev_old: elevation field at previous timestep
+        """
         f = self._psi_eta_steady(uv, elev, uv, elev)  # NOTE: Not semi-implicit
         f_old = self._psi_eta_steady(uv_old, elev_old, uv_old, elev_old)
         return self.theta * f + (1 - self.theta) * f_old
 
+    @PETSc.Log.EventDecorator("ErrorEstimator.strong_residuals")
     def strong_residuals(self, *args):
         """
         Compute the strong residual over a single
-        timestep.
+        timestep, given current solution and
+        lagged solution.
         """
         nargs = len(args)
         assert nargs == 2 if self.steady else 4
@@ -476,16 +596,12 @@ class ErrorEstimator(object):
         else:
             raise NotImplementedError
 
+    @PETSc.Log.EventDecorator("ErrorEstimator.flux_terms")
     def flux_terms(self, *args):
         """
         Compute flux jump terms over a single
         timestep, given current solution tuple
-        `(uv, elev)` and lagged solution tuple
-        `(uv_old, elev_old)`.
-
-        If :attr:`timestepper` is set to
-        `'SteadyState'` then only the `uv` and
-        `elev` arguments are used.
+        and lagged solution tuple.
         """
         if self.steady:
             return [
@@ -500,6 +616,7 @@ class ErrorEstimator(object):
                 self._psi_eta_unsteady(*args),
             ]
 
+    @PETSc.Log.EventDecorator("ErrorEstimator.recover_laplacians")
     def recover_laplacians(self, uv, elev):
         """
         Recover the Laplacian of solution
@@ -526,6 +643,7 @@ class ErrorEstimator(object):
                 for proj in projections
             ]
 
+    @PETSc.Log.EventDecorator("ErrorEstimator.recover_hessians")
     def recover_hessians(self, uv, elev):
         """
         Recover the Hessian of solution
@@ -537,6 +655,7 @@ class ErrorEstimator(object):
             hessian_metric(recover_hessian(elev, mesh=self.mesh)),
         ]
 
+    @PETSc.Log.EventDecorator("ErrorEstimator.difference_quotient")
     def difference_quotient(self, *args, flux_form=False):
         """
         Evaluate the dual weighted residual
@@ -571,14 +690,22 @@ class ErrorEstimator(object):
         dq.interpolate(abs(dq))  # Ensure positivity
         return dq
 
+    @PETSc.Log.EventDecorator("ErrorEstimator.error_indicator")
     def error_indicator(self, *args, **kwargs):
+        """
+        Evaluate the error indicator of choice.
+        """
         if self.error_estimator == "difference_quotient":
             flux_form = kwargs.get("flux_form", False)
             return self.difference_quotient(*args, flux_form=flux_form)
         else:
-            raise NotImplementedError
+            raise NotImplementedError  # TODO
 
+    @PETSc.Log.EventDecorator("ErrorEstimator.metric")
     def metric(self, *args, **kwargs):
+        """
+        Construct the metric of choice.
+        """
         if self.metric == "isotropic":
             return isotropic_metric(self.error_indicator(*args, **kwargs))
         elif self.metric == "weighted_hessian":
