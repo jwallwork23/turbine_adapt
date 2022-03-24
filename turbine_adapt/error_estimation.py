@@ -59,7 +59,7 @@ class ErrorEstimator(object):
         # Error estimation parameters
         assert norm_type in ("L1", "L2")
         self.norm_type = norm_type
-        assert error_estimator in ("residual_flux", "difference_quotient")
+        assert error_estimator == "difference_quotient"
         self.error_estimator = error_estimator
         if metric not in ["isotropic", "weighted_hessian"]:
             raise NotImplementedError  # TODO
@@ -86,12 +86,12 @@ class ErrorEstimator(object):
         return div(H * uv)
 
     def _restrict(self, v):
-        if self.error_estimator == "residual_flux":
-            return jump(v, self.p0test)
-        elif self.norm_type == "L1":
+        if self.norm_type == "L1":
             return jump(abs(v), self.p0test)
-        else:
+        elif self.norm_type == "L2":
             return jump(v * v, self.p0test)
+        else:
+            raise NotImplementedError
 
     def _get_bnd_functions(self, eta_in, uv_in, bnd_in):
         funcs = self.options.bnd_conditions.get(bnd_in)
@@ -212,21 +212,11 @@ class ErrorEstimator(object):
         # Compute flux norm
         mass_term = self.p0test * self.p0trial * self.dx
         ibp_terms = self._restrict(ibp_terms) * self.dS
-        if self.error_estimator == "residual_flux":
-            flux_terms = inner(flux_terms, self._restrict(uv_star[0])) * self.dS
-            bnd_terms = sum(
-                [
-                    self._restrict(inner(term, uv_star[0])) * ds_bnd
-                    for ds_bnd, term in bnd_terms.items()
-                ]
-            )
-        else:
-            flux_terms = self._restrict(flux_terms) * self.dS
-            bnd_terms = sum(
-                [self._restrict(term) * ds_bnd for ds_bnd, term in bnd_terms.items()]
-            )
+        flux_terms = self._restrict(flux_terms) * self.dS
+        bnd_terms = sum(
+            [self._restrict(term) * ds_bnd for ds_bnd, term in bnd_terms.items()]
+        )
         sp = {
-            "mat_type": "matfree",
             "snes_type": "ksponly",
             "ksp_type": "preonly",
             "pc_type": "jacobi",
@@ -234,8 +224,6 @@ class ErrorEstimator(object):
         solve(
             mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp
         )
-        if self.error_estimator == "residual_flux":
-            return psi
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == "L2" else psi
 
@@ -246,7 +234,7 @@ class ErrorEstimator(object):
             uv_old, elev_old = uv, elev
         else:
             assert len(args) == 6
-            uv, elev, uv_old, elev_old, uv_star, elev_star
+            uv, elev, uv_old, elev_old, uv_star, elev_star = args
         psi = Function(self.P0)
         H = self.options.bathymetry2d + elev_old
         g = physical_constants["g_grav"]
@@ -336,21 +324,11 @@ class ErrorEstimator(object):
         # Compute flux norm
         mass_term = self.p0test * self.p0trial * self.dx
         ibp_terms = self._restrict(ibp_terms) * self.dS
-        if self.error_estimator == "residual_flux":
-            flux_terms = inner(flux_terms, self._restrict(uv_star[1])) * self.dS
-            bnd_terms = sum(
-                [
-                    self._restrict(inner(term, uv_star[1])) * ds_bnd
-                    for ds_bnd, term in bnd_terms.items()
-                ]
-            )
-        else:
-            flux_terms = self._restrict(flux_terms) * self.dS
-            bnd_terms = sum(
-                [self._restrict(term) * ds_bnd for ds_bnd, term in bnd_terms.items()]
-            )
+        flux_terms = self._restrict(flux_terms) * self.dS
+        bnd_terms = sum(
+            [self._restrict(term) * ds_bnd for ds_bnd, term in bnd_terms.items()]
+        )
         sp = {
-            "mat_type": "matfree",
             "snes_type": "ksponly",
             "ksp_type": "preonly",
             "pc_type": "jacobi",
@@ -358,8 +336,6 @@ class ErrorEstimator(object):
         solve(
             mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp
         )
-        if self.error_estimator == "residual_flux":
-            return psi
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == "L2" else psi
 
@@ -408,21 +384,11 @@ class ErrorEstimator(object):
         # Compute flux norm
         mass_term = self.p0test * self.p0trial * self.dx
         ibp_terms = self._restrict(ibp_terms) * self.dS
-        if self.error_estimator == "residual_flux":
-            flux_terms = inner(flux_terms, self._restrict(elev_star)) * self.dS
-            bnd_terms = sum(
-                [
-                    self._restrict(inner(term, elev_star)) * ds_bnd
-                    for ds_bnd, term in bnd_terms.items()
-                ]
-            )
-        else:
-            flux_terms = self._restrict(flux_terms) * self.dS
-            bnd_terms = sum(
-                [self._restrict(term) * ds_bnd for ds_bnd, term in bnd_terms.items()]
-            )
+        flux_terms = self._restrict(flux_terms) * self.dS
+        bnd_terms = sum(
+            [self._restrict(term) * ds_bnd for ds_bnd, term in bnd_terms.items()]
+        )
         sp = {
-            "mat_type": "matfree",
             "snes_type": "ksponly",
             "ksp_type": "preonly",
             "pc_type": "jacobi",
@@ -430,8 +396,6 @@ class ErrorEstimator(object):
         solve(
             mass_term == flux_terms + ibp_terms + bnd_terms, psi, solver_parameters=sp
         )
-        if self.error_estimator == "residual_flux":
-            return psi
         psi.interpolate(abs(psi))
         return sqrt(psi) if self.norm_type == "L2" else psi
 
@@ -523,27 +487,20 @@ class ErrorEstimator(object):
         else:
             Psi_uv = self._Psi_uv_unsteady(*args[: nargs // 2])
             Psi_eta = self._Psi_eta_unsteady(*args[: nargs // 2])
-        if self.error_estimator == "residual_flux":
-            uv_star = args[nargs // 2]
-            elev_star = args[nargs // 2 + 1]
-            # TODO: In time-dep case, apply adjoint_next and adjoint separately
-            return [
-                assemble(self.p0test * inner(Psi_uv[0], uv_star[0]) * self.dx),
-                assemble(self.p0test * inner(Psi_uv[1], uv_star[1]) * self.dx),
-                assemble(self.p0test * inner(Psi_eta, elev_star) * self.dx),
-            ]
-        elif self.norm_type == "L1":
+        if self.norm_type == "L1":
             return [
                 assemble(self.p0test * abs(Psi_uv[0]) * self.dx),
                 assemble(self.p0test * abs(Psi_uv[1]) * self.dx),
                 assemble(self.p0test * abs(Psi_eta) * self.dx),
             ]
-        else:
+        elif self.norm_type == "L2":
             return [
                 sqrt(abs(assemble(self.p0test * Psi_uv[0] * Psi_uv[0] * self.dx))),
                 sqrt(abs(assemble(self.p0test * Psi_uv[1] * Psi_uv[1] * self.dx))),
                 sqrt(abs(assemble(self.p0test * Psi_eta * Psi_eta * self.dx))),
             ]
+        else:
+            raise NotImplementedError
 
     def flux_terms(self, *args):
         """
@@ -564,9 +521,9 @@ class ErrorEstimator(object):
             ]
         else:
             return [
-                self._psi_u_unsteady(*args[:6]),
-                self._psi_v_unsteady(*args[:6]),
-                self._psi_eta_unsteady(*args[:6]),
+                self._psi_u_unsteady(*args),
+                self._psi_v_unsteady(*args),
+                self._psi_eta_unsteady(*args),
             ]
 
     def recover_laplacians(self, uv, elev):
@@ -642,19 +599,8 @@ class ErrorEstimator(object):
         if self.error_estimator == "difference_quotient":
             flux_form = kwargs.get("flux_form", False)
             return self.difference_quotient(*args, flux_form=flux_form)
-        elif self.error_estimator == "residual_flux":
-            self.residuals = self.strong_residuals(*args)
-            self.fluxes = self.flux_terms(*args)
-            dwr = self.residuals[0]
-            dwr += self.residuals[1]
-            dwr += self.residuals[2]
-            dwr += self.fluxes[0]
-            dwr += self.fluxes[1]
-            dwr += self.fluxes[2]
-            dwr.interpolate(abs(dwr))
-            return dwr
         else:
-            raise ValueError
+            raise NotImplementedError
 
     def metric(self, *args, **kwargs):
         if self.metric == "isotropic":
