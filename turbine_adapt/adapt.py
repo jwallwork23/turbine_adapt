@@ -130,9 +130,8 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             solver_obj.assign_initial_conditions(uv=uv, elev=elev)
             solver_obj.i_export = i_export
             solver_obj.next_export_t = i_export * options.simulation_export_time
-            solver_obj.iteration = int(
-                np.ceil(solver_obj.next_export_t / options.timestep)
-            )
+            it = int(np.ceil(solver_obj.next_export_t / options.timestep))
+            solver_obj.iteration = it
             solver_obj.simulation_time = t_start
             solver_obj.export_initial_state = False
             if not options.no_exports:
@@ -180,15 +179,11 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         :class:`GoalOrientedTidalFarm` object.
         """
         if self.integrated_quantity == "energy":
-            P0 = get_functionspace(self[i], "DG", 0)
             ct = self.options.corrected_thrust_coefficient * Constant(pi / 8)
-            turbine_drag = sum(
-                [
-                    interpolate(ct, P0, subset=self[i].cell_subset(tag))
-                    for tag in self.qoi_farm_ids.flatten()
-                ],
-                start=Constant(self.options.quadratic_drag_coefficient),
-            )
+            turbine_drag = Function(get_functionspace(self[i], "DG", 0))
+            turbine_drag.assign(self.options.quadratic_drag_coefficient)
+            for tag in self.qoi_farm_ids.flatten():
+                turbine_drag.assign(ct, subset=self[i].cell_subset(tag))
 
             def qoi(sol, t):
                 u, eta = sol["swe2d"].split()
@@ -234,7 +229,6 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         end_time = options.simulation_end_time
         dt = options.timestep
         approach = parsed_args.approach.split("_")[0]
-        P0 = get_functionspace(options.mesh2d, "DG", 0)
         h_min = parsed_args.h_min
         h_max = parsed_args.h_max
         turbine_h_min = parsed_args.turbine_h_min
@@ -245,6 +239,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         )  # Convert to space-time complexity
         num_subintervals = self.num_subintervals
         timesteps = [dt] * num_subintervals
+        p = parsed_args.norm_order
 
         # Enter fixed point iteration
         miniter = parsed_args.miniter
@@ -259,6 +254,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         J_old = None
         load_index = parsed_args.load_index
         fp_iteration = load_index
+        msg = "Termination due to {:s} after {:d} iterations"
         while fp_iteration <= maxiter:
             outfiles = AttrDict({})
             if fp_iteration < miniter:
@@ -271,15 +267,12 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             # Load meshes, if requested
             if load_index > 0 and fp_iteration == load_index:
                 for i in range(num_subintervals):
-                    mesh_fname = os.path.join(output_dir, f"mesh_fp{fp_iteration}_{i}")
-                    if os.path.exists(mesh_fname + ".h5"):
-                        print_output(
-                            f"\n--- Loading plex data for mesh {i+1}\n{mesh_fname}"
-                        )
-                    else:
-                        raise IOError(f"Cannot load mesh file {mesh_fname}.")
+                    fname = f"{output_dir}/mesh_fp{fp_iteration}_{i}"
+                    if not os.path.exists(fname + ".h5"):
+                        raise IOError(f"Cannot load mesh file {fname}.")
+                    print_output(f"\n--- Loading plex {i+1}\n{fname}")
                     plex = PETSc.DMPlex().create()
-                    plex.createFromFile(mesh_fname + ".h5")
+                    plex.createFromFile(fname + ".h5")
                     self.meshes[i] = Mesh(plex)
 
             # Create metrics
@@ -291,17 +284,15 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             if fp_iteration == load_index:
                 for i, metric in enumerate(metric_fns):
                     if load_index == 0:
-                        metric_fname = os.path.join(self.root_dir, f"metric{i}")
+                        fname = f"{self.root_dir}/metric{i}"
                     else:
-                        metric_fname = os.path.join(
-                            output_dir, f"metric{i}_fp{fp_iteration}"
-                        )
-                    if os.path.exists(metric_fname + ".h5"):
+                        fname = f"{output_dir}/metric{i}_fp{fp_iteration}"
+                    if os.path.exists(fname + ".h5"):
                         print_output(
-                            f"\n--- Loading metric data on mesh {i+1}\n{metric_fname}"
+                            f"\n--- Loading metric data on mesh {i+1}\n{fname}"
                         )
                         try:
-                            with DumbCheckpoint(metric_fname, mode=FILE_READ) as chk:
+                            with DumbCheckpoint(fname, mode=FILE_READ) as chk:
                                 chk.load(metric, name="Metric")
                             loaded = True
                         except Exception:
@@ -347,10 +338,8 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
                 # Escape if converged
                 if converged:
-                    print_output(
-                        f"Termination due to {converged_reason} after {fp_iteration+1}"
-                        + f" iterations\nEnergy output: {self.J/3.6e+09} MWh"
-                    )
+                    print_output(msg.format(converged_reason, fp_iteration + 1))
+                    print_output(f"Energy output: {self.J/3.6e+09} MWh")
                     break
 
                 # Create vtu output files
@@ -443,9 +432,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
                     # Plot error indicators
                     if approach == "isotropic":
-                        outfiles.error = File(
-                            os.path.join(output_dir, "Indicator2d.pvd")
-                        )
+                        outfiles.error = File(f"{output_dir}/Indicator2d.pvd")
                         for error_indicator in error_indicators:
                             error_indicator[0].rename("Error indicator")
                             outfiles.error.write(error_indicator[0])
@@ -469,22 +456,19 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                                 )
                             )
 
+                        # Stash metric data
                         print_output(f"\n--- Storing metric data on mesh {i+1}\n")
-                        metric_fname = os.path.join(
-                            output_dir, f"metric{i}_fp{fp_iteration}"
-                        )
-                        with DumbCheckpoint(metric_fname, mode=FILE_CREATE) as chk:
+                        fname = f"{output_dir}/metric{i}_fp{fp_iteration}"
+                        with DumbCheckpoint(fname, mode=FILE_CREATE) as chk:
                             chk.store(metric_fns[i], name="Metric")
                         if fp_iteration == 0:
-                            metric_fname = os.path.join(self.root_dir, f"metric{i}")
-                            with DumbCheckpoint(metric_fname, mode=FILE_CREATE) as chk:
+                            fname = f"{self.root_dir}/metric{i}"
+                            with DumbCheckpoint(fname, mode=FILE_CREATE) as chk:
                                 chk.store(metric_fns[i], name="Metric")
 
-            # Process metrics
+            # Apply space-time normalisation
             print_output(f"\n--- Metric processing {fp_iteration}\n")
-            space_time_normalise(
-                metric_fns, end_time, timesteps, target, parsed_args.norm_order
-            )
+            space_time_normalise(metric_fns, end_time, timesteps, target, p)
 
             # Enforce element constraints, accounting for turbines
             hmins = []
@@ -493,22 +477,21 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 P0 = get_functionspace(mesh, "DG", 0)
                 hmin = Function(P0).assign(h_min)
                 hmax = Function(P0).assign(h_max)
-                for i, subdomain_id in enumerate(options.farm_ids):
-                    subset = mesh.cell_subset(subdomain_id)
-                    hmin.assign(turbine_h_min, subset=subset)
-                    hmax.assign(turbine_h_max, subset=subset)
+                for tag in self.qoi_farm_ids.flatten():
+                    hmin.assign(turbine_h_min, subset=mesh.cell_subset(tag))
+                    hmax.assign(turbine_h_max, subset=mesh.cell_subset(tag))
                 hmins.append(hmin)
                 hmaxs.append(hmax)
             enforce_element_constraints(metric_fns, hmins, hmaxs, a_max)
 
             # Plot metrics
-            outfiles.metric = File(os.path.join(output_dir, "Metric2d.pvd"))
+            outfiles.metric = File(f"{output_dir}/Metric2d.pvd")
             for metric in metric_fns:
                 outfiles.metric.write(metric)
 
             # Adapt meshes
             print_output(f"\n--- Mesh adaptation {fp_iteration}\n")
-            outfiles.mesh = File(os.path.join(output_dir, "Mesh2d.pvd"))
+            outfiles.mesh = File(f"{output_dir}/Mesh2d.pvd")
             for i, metric in enumerate(metrics):
                 self.meshes[i] = Mesh(adapt(self.meshes[i], metric))
                 outfiles.mesh.write(self.meshes[i].coordinates)
@@ -523,21 +506,17 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                         elements_converged = False
             num_cells_old = num_cells
             if elements_converged:
-                print_output(f"Mesh element count converged to rtol {element_rtol}")
                 converged = True
                 converged_reason = "converged element counts"
 
             # Save mesh data to disk
             if COMM_WORLD.size == 1:
                 for i, mesh in enumerate(self.meshes):
-                    mesh_fname = os.path.join(
-                        output_dir, f"mesh_fp{fp_iteration+1}_{i}.h5"
-                    )
-                    viewer = PETSc.Viewer().createHDF5(mesh_fname, "w")
+                    fname = f"{output_dir}/mesh_fp{fp_iteration+1}_{i}.h5"
+                    viewer = PETSc.Viewer().createHDF5(fname, "w")
                     viewer(mesh.topology_dm)
 
             # Increment
             fp_iteration += 1
-        print_output(
-            f"Converged in {fp_iteration+1} iterations due to {converged_reason}"
-        )
+        print_output(msg.format(converged_reason, fp_iteration + 1))
+        print_output(f"Energy output: {self.J/3.6e+09} MWh")
