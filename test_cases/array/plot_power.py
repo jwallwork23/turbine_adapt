@@ -114,7 +114,7 @@ for i in range(5):
 if combine_plots:
     axes.plot(
         time,
-        np.sum(power, axis=1) * 1030.0 / 1.0e06,
+        np.sum(power, axis=1),
         "--",
         label="Overall",
         color="gray",

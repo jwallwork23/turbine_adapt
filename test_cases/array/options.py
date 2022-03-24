@@ -46,7 +46,7 @@ class ArrayOptions(FarmOptions):
                 self.timestep /= 2
         self.tide_time = 0.1 * self.M2_tide_period
         self.ramp_time = self.tide_time
-        self.simulation_end_time = 2 * self.tide_time
+        self.simulation_end_time = 0.5 * self.tide_time
         self.simulation_export_time = 11.16
 
         # Domain and mesh
