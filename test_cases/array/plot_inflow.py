@@ -28,7 +28,7 @@ for config in configs:
         f = pd.read_csv(f"{data_dir}/inflow_{padded}.csv", usecols=["x-velocity"])
         xvelocity[config].append(np.array(f["x-velocity"]))
 
-# Plot
+# Plot inflow velocity
 x = np.arange(0, 1001)
 fig, axes = plt.subplots()
 for i, xva, xvs in zip(timesteps, xvelocity["aligned"], xvelocity["staggered"]):
@@ -36,18 +36,14 @@ for i, xva, xvs in zip(timesteps, xvelocity["aligned"], xvelocity["staggered"]):
     axes.plot(x[np.isfinite(xvs)], xvs[np.isfinite(xvs)], color="mediumseagreen", label="Staggered" if i == 0 else None)
     if approach != "fixed_mesh":
         note = r"$%.2f\,T_{\mathrm{tide}}$" % (1.0 + i / timesteps_per_cycle)
-        axes.annotate(note, (1030, xva[-1]), fontsize=16, annotation_clip=False)
+        axes.annotate(note, (1030, 0.5 * (xva[-1] + xvs[-1])), fontsize=16, annotation_clip=False)
 axes.set_xlim([0, 1000])
 axes.set_xlabel(r"$y$-coordinate ($\mathrm{m}$)")
-axes.set_ylabel(r"Inflow velocity ($\mathrm{m\,s}^{-1}$)")
-axes.set_ylim([0, 3])
+axes.set_ylabel(r"Normal velocity ($\mathrm{m\,s}^{-1}$)")
 axes.grid(True)
-axes.set_aspect(250)
 lines, labels = axes.get_legend_handles_labels()
-l = ["Fixed mesh" if approach == "fixed_mesh" else "Adaptive"]
-axes.legend(lines[:1], l, loc="upper right", handlelength=0, handletextpad=0, fontsize=18)
 plt.tight_layout()
-plt.savefig(f"plots/inflow_{approach}.pdf")
+plt.savefig(f"plots/inflow_velocity_{approach}.pdf")
 
 # Plot legend separately
 fname = "plots/legend_inflow.pdf"
@@ -58,3 +54,21 @@ if not os.path.exists(fname):
     axes2.set_axis_off()
     bbox = legend.get_window_extent().transformed(fig2.dpi_scale_trans.inverted())
     plt.savefig(fname, bbox_inches=bbox)
+
+# Plot inflow dynamic pressure
+x = np.arange(0, 1001)
+fig, axes = plt.subplots()
+for i, xva, xvs in zip(timesteps, xvelocity["aligned"], xvelocity["staggered"]):
+    dpa = 0.5 * 1030.0 * xva[np.isfinite(xva)] ** 2 / 1000
+    axes.plot(x[np.isfinite(xva)], dpa, color="C0", label="Aligned" if i == 0 else None)
+    dps = 0.5 * 1030.0 * xvs[np.isfinite(xvs)] ** 2 / 1000
+    axes.plot(x[np.isfinite(xvs)], dps, color="mediumseagreen", label="Staggered" if i == 0 else None)
+    if approach != "fixed_mesh":
+        note = r"$%.2f\,T_{\mathrm{tide}}$" % (1.0 + i / timesteps_per_cycle)
+        axes.annotate(note, (1030, 0.5 * (dpa[-1] + dps[-1])), fontsize=16, annotation_clip=False)
+axes.set_xlim([0, 1000])
+axes.set_xlabel(r"$y$-coordinate ($\mathrm{m}$)")
+axes.set_ylabel(r"Dynamic pressure ($\mathrm{kPa}$)")
+axes.grid(True)
+plt.tight_layout()
+plt.savefig(f"plots/inflow_dynamic_pressure_{approach}.pdf")

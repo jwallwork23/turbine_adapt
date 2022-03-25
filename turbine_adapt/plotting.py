@@ -13,3 +13,5 @@ matplotlib.rcParams["mathtext.bf"] = "Bitstream Vera Sans:bold"
 matplotlib.rcParams["mathtext.fontset"] = "stix"
 matplotlib.rcParams["font.family"] = "STIXGeneral"
 matplotlib.rcParams["font.size"] = 24
+
+whiteline = matplotlib.lines.Line2D([0], [0], color="w")
