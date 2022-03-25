@@ -280,7 +280,8 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                     self.meshes[i] = Mesh(plex)
 
             # Create metrics
-            metrics = [RiemannianMetric(mesh) for mesh in self.meshes]
+            kw = dict(metric_parameters=dict(dm_plex_metric_verbosity=10))
+            metrics = [RiemannianMetric(mesh, **kw) for mesh in self.meshes]
             metric_fns = [metric.function for metric in metrics]
 
             # Load metric data, if available
