@@ -19,7 +19,7 @@ parser.parse_loading()
 parsed_args = parser.parse_args()
 config = parsed_args.config
 target = parsed_args.target_complexity
-approach = parsed_args.approach.split("_")[0]
+approach = parsed_args.approach.split("_dwr")[0]
 ramp_level = parsed_args.ramp_level
 
 # Mesh independent setup

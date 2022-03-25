@@ -114,7 +114,12 @@ class Parser(argparse.ArgumentParser):
             "-a",
             "--approach",
             help="Adaptive approach to consider",
-            choices=["fixed_mesh", "isotropic_dwr", "anisotropic_dwr"],
+            choices=[
+                "fixed_mesh",
+                "isotropic_dwr",
+                "anisotropic_dwr",
+                "weighted_hessian",
+            ],
             default=default,
         )
 

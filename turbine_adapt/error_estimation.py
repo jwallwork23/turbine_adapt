@@ -63,8 +63,8 @@ class ErrorEstimator(object):
         assert error_estimator == "difference_quotient"
         self.error_estimator = error_estimator
         if metric not in ["isotropic", "weighted_hessian"]:
-            raise NotImplementedError  # TODO
-        self.metric = metric
+            raise ValueError(f"Metric type {metric} not supported")
+        self.metric_type = metric
         self.boundary = boundary
 
     def _Psi_uv_steady(self, uv, elev):
@@ -706,9 +706,9 @@ class ErrorEstimator(object):
         """
         Construct the metric of choice.
         """
-        if self.metric == "isotropic":
+        if self.metric_type == "isotropic":
             return isotropic_metric(self.error_indicator(*args, **kwargs))
-        elif self.metric == "weighted_hessian":
+        elif self.metric_type == "weighted_hessian":
             flux_form = kwargs.get("flux_form", False)
             nargs = len(args)
             assert nargs == 4 if self.steady else 8
