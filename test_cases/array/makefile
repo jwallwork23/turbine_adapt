@@ -5,7 +5,7 @@ FIXED_MESHES	= 0 1 2 3 4
 TARGETS			=
 # TODO: set target complexities
 
-.PHONY	:= plot_energy
+.PHONY	:= plot_energy, plot_inflow
 
 # --- Setup
 
@@ -85,6 +85,10 @@ plot_energy:
 			python3 plot_energy.py $$config $$mode; \
 		done; \
 	done
+
+plot_inflow:
+	python3 plot_inflow.py -a fixed_mesh
+	python3 plot_inflow.py -a isotropic_dwr
 
 
 # --- Cleanup
