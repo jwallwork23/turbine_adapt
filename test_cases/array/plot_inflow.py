@@ -9,7 +9,7 @@ import pandas as pd
 parser = Parser("test_cases/array/plot_inflow.py")
 parser.parse_approach(default="fixed_mesh")
 parsed_args = parser.parse_args()
-approach = parsed_args.approach.split("_dwr")[0]
+approach = parsed_args.approach
 
 # Timesteps to take slices at
 timesteps = [0, 20, 40, 80]

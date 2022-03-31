@@ -19,7 +19,7 @@ def get_data(config, modes, namespace):
     :arg namespace: a :class:`NameSpace` of user input
     """
     level = namespace.level
-    approach = namespace.approach.split("_dwr")[0]
+    approach = namespace.approach
     end_time = namespace.end_time
 
     options = ArrayOptions(level=level, configuration=config, meshgen=True)
@@ -112,7 +112,7 @@ configs = parsed_args.configurations
 if len(configs) == 0:
     print("Nothing to plot.")
     sys.exit(0)
-approach = parsed_args.approach.split("_dwr")[0]
+approach = parsed_args.approach
 mode = parsed_args.mode
 modes = ["ramp", "run"] if mode == "both" else [mode]
 colours = ["b", "C0", "mediumturquoise", "mediumseagreen", "g"]
