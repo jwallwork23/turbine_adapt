@@ -19,7 +19,7 @@ def get_data(config, modes, namespace):
     :arg namespace: a :class:`NameSpace` of user input
     """
     level = namespace.level
-    approach = namespace.approach
+    approach = namespace.approach.split("_dwr")[0]
     end_time = namespace.end_time
 
     options = ArrayOptions(level=level, configuration=config, meshgen=True)
@@ -149,7 +149,7 @@ for config in configs:
     axes.grid(True)
     lines, labels = axes.get_legend_handles_labels()
     l = ["\n".join([config.capitalize(), "(fixed)" if approach == "fixed_mesh" else "(adaptive)"])]
-    axes.legend(lines[:1], l, loc="upper right", handlelength=0, handletextpad=0, fontsize=18)
+    axes.legend([whiteline], l, loc="upper right", handlelength=0, handletextpad=0, fontsize=18)
     plt.tight_layout()
     cmb = "_combined" if parsed_args.combine_plots else ""
     plot_dir = create_directory(f"plots/{config}/{approach}/{run}")
