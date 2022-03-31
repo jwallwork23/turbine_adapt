@@ -229,7 +229,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         output_dir = options.output_directory
         end_time = options.simulation_end_time
         dt = options.timestep
-        approach = parsed_args.approach.split("_dwr")[0]
+        approach = parsed_args.approach
         h_min = parsed_args.h_min
         h_max = parsed_args.h_max
         turbine_h_min = parsed_args.turbine_h_min

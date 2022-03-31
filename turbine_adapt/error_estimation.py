@@ -18,7 +18,7 @@ class ErrorEstimator(object):
         mesh=None,
         norm_type="L2",
         error_estimator="difference_quotient",
-        metric="isotropic",
+        metric="isotropic_dwr",
         boundary=True,
     ):
         """
@@ -62,7 +62,7 @@ class ErrorEstimator(object):
         self.norm_type = norm_type
         assert error_estimator == "difference_quotient"
         self.error_estimator = error_estimator
-        if metric not in ["isotropic", "weighted_hessian"]:
+        if metric not in ["isotropic_dwr", "anisotropic_dwr", "weighted_hessian"]:
             raise ValueError(f"Metric type {metric} not supported")
         self.metric_type = metric
         self.boundary = boundary
@@ -706,10 +706,12 @@ class ErrorEstimator(object):
         """
         Construct the metric of choice.
         """
-        if self.metric_type == "isotropic":
+        if self.metric_type == "isotropic_dwr":
             return isotropic_metric(self.error_indicator(*args, **kwargs))
-        elif self.metric_type == "weighted_hessian":
+        elif self.metric_type in ("anisotropic_dwr", "weighted_hessian"):
             flux_form = kwargs.get("flux_form", False)
+            kwargs["approach"] = self.metric_type
+
             nargs = len(args)
             assert nargs == 4 if self.steady else 8
             nargs2 = nargs // 2
@@ -717,25 +719,39 @@ class ErrorEstimator(object):
 
             # Terms for standard a posteriori error estimate
             Psi = self.strong_residuals(*args[:nargs2])
-            psi = self.flux_terms(*args[:nargs2])
 
-            # Weighting term for the adjoint
-            if flux_form:
-                raise ValueError("Flux form is incompatible with WH.")
+            # Adjoint weighting for anisotropic DWR
+            if self.metric_type == "anisotropic_dwr":
+                psi = self.flux_terms(*args[:nargs2])
+                ee = [Psi_i + psi_i / sqrt(self.h) for Psi_i, psi_i in zip(Psi, psi)]
+                if flux_form:
+                    R = self.flux_terms(*args[nargs2:])
+                else:
+                    R = self.recover_laplacians(*args[nargs2:nargs22])
+                    if self.steady:
+                        ee = [ee_i * R_i for ee_i, R_i in zip(ee, R)]
+                    else:
+                        for i, R_next_i in enumerate(self.recover_laplacians(*args[nargs22:])):
+                            ee[i] *= 0.5 * (R[i] + R_next_i)
             else:
-                H = self.recover_hessians(*args[nargs2:nargs22])
-                if not self.steady:  # Average recovered Hessians
-                    for H_i, H_old_i in zip(H, self.recover_hessians(*args[-2:])):
-                        H_i += H_old_i
-                        H_i *= 0.5
+                ee = Psi
+                if flux_form:
+                    raise ValueError("Flux form is incompatible with WH.")
+            ee = firedrake.project(sum(ee), self.P0)
+
+            # Hessian weighting term
+            istart = nargs2 if self.metric_type == "weighted_hessian" else 0
+            iend = istart + 2
+            H = self.recover_hessians(*args[istart:iend])
+            if not self.steady:  # Average recovered Hessians
+                istart += 2
+                iend += 2
+                for i, H_old_i in enumerate(self.recover_hessians(*args[istart:iend])):
+                    H[i] = 0.5 * (H[i] + H_old_i)
+            H = firedrake.interpolate(sum(H), self.P1_ten)
 
             # Combine the two
-            M = Function(self.P1_ten, name="Weighted Hessian metric")
-            expr = 0
-            for Psi_i, psi_i, H_i in zip(Psi, psi, H):
-                expr += (Psi_i + psi_i / sqrt(self.h)) * H_i
-            M.project(expr)
-            M.assign(hessian_metric(M))
-            return M
+            kwargs.pop("error_indicator", None)
+            return anisotropic_metric([ee], [H], target_space=self.P1_ten, **kwargs)
         else:
-            raise NotImplementedError  # TODO
+            raise ValueError(f"Metric type {self.metric_type} not supported")
