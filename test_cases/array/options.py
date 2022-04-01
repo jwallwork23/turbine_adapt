@@ -31,7 +31,8 @@ class ArrayOptions(FarmOptions):
         self.array_ids = np.array(
             [[2, 5, 8, 11, 14], [3, 6, 9, 12, 15], [4, 7, 10, 13, 16]]
         )
-        self.farm_ids = tuple(self.array_ids.transpose().reshape((self.num_turbines,)))
+        self.column_ids = self.array_ids.transpose()
+        self.farm_ids = tuple(self.column_ids.flatten())
         self.thrust_coefficient = 2.985
         self.ramp_dir = kwargs.get("ramp_dir")
         self.ramp_level = kwargs.get("ramp_level", 0)
