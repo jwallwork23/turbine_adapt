@@ -28,7 +28,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         self.root_dir = root_dir
         self.integrated_quantity = kwargs.get("qoi", "energy")
         self.keep_log = False
-        self.qoi_farm_ids = kwargs.get("qoi_farm_ids", options.array_ids)
+        self.qoi_farm_ids = kwargs.get("qoi_farm_ids", options.farm_ids)
 
         # Partition time interval
         dt = options.timestep

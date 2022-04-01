@@ -49,13 +49,12 @@ class ErrorEstimator(object):
         self.eta_is_dg = self.options.element_family == "dg-dg"
 
         # Get turbine drag coefficient
-        self.drag_coefficient = self.options.quadratic_drag_coefficient
+        Cb = self.options.quadratic_drag_coefficient
         Ct = self.options.corrected_thrust_coefficient * Constant(pi / 8)
+        self.drag_coefficient = Function(self.P0).assign(Cb)
         for i, subdomain_id in enumerate(options.farm_ids):
-            indicator = interpolate(
-                Constant(1.0), self.P0, subset=self.mesh.cell_subset(subdomain_id)
-            )
-            self.drag_coefficient = self.drag_coefficient + Ct * indicator
+            subset = self.mesh.cell_subset(subdomain_id)
+            self.drag_coefficient.assign(Ct + Cb, subset=subset)
 
         # Error estimation parameters
         assert norm_type in ("L1", "L2")
