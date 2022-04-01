@@ -33,7 +33,7 @@ approach = parsed_args.approach
 ramp_level = parsed_args.ramp_level
 
 # Mesh independent setup
-ramp_dir = f"outputs/{config}/fixed_mesh/level{ramp_level}/ramp"
+ramp_dir = f"outputs/{config}/fixed_mesh/level{ramp_level}/ramp/hdf5"
 options = ArrayOptions(
     level=parsed_args.level,
     configuration=config,

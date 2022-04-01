@@ -26,6 +26,7 @@ parser.add_argument(
 )
 parsed_args = parser.parse_args()
 config = parsed_args.configuration
+load_index = parsed_args.load_index
 
 # Set parameters
 options = ArrayOptions(
@@ -35,16 +36,17 @@ options = ArrayOptions(
     fields_to_export_hdf5=["uv_2d", "elev_2d"],
 )
 options.simulation_end_time = options.ramp_time
-options.simulation_export_time = 0.1 * options.ramp_time
 options.create_tidal_farm()
 output_dir = options.output_directory
 output_dir += f"/{config}/fixed_mesh/level{parsed_args.level}/ramp"
 options.output_directory = create_directory(output_dir)
 
-# Solve
+# Setup solver
 solver_obj = FarmSolver(options)
 options.apply_boundary_conditions(solver_obj)
-solver_obj.add_callback(PowerOutputCallback(solver_obj), "timestep")
+cb = PowerOutputCallback(solver_obj)
+cb._create_new_file = load_index == 0
+solver_obj.add_callback(cb, "timestep")
 if parsed_args.plot_vorticity:
     vorticity_2d = Function(solver_obj.function_spaces.P1_2d, name="vorticity_2d")
     uv_2d = solver_obj.fields.uv_2d
@@ -58,12 +60,14 @@ if parsed_args.plot_vorticity:
         preproc_func=vorticity_calculator.solve,
     )
     options.fields_to_export.append("vorticity_2d")
-if parsed_args.load_index is None:
+if load_index is None:
     options.apply_initial_conditions(solver_obj)
 else:
     idx = parsed_args.load_index
     print_output(f"Loading state at time {idx * options.simulation_export_time}")
     solver_obj.load_state(idx)
+
+# Time integrate
 solver_obj.iterate(
     update_forcings=options.update_forcings, export_func=options.export_func
 )
