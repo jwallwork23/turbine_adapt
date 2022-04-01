@@ -87,6 +87,14 @@ class ArrayOptions(FarmOptions):
         self.use_grad_depth_viscosity = True
         self.element_family = "dg-dg"
 
+        # Solver parameters
+        self.swe_timestepper_options.solver_parameters = {
+            "snes_type": "newtonls",
+            "ksp_type": "gmres",
+            "pc_type": "bjacobi",
+            "sub_pc_type": "ilu",
+        }
+
         # Boundary forcing
         self.max_amplitude = 0.5
         self.omega = 2 * pi / self.tide_time
