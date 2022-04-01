@@ -1,16 +1,16 @@
 all: dir clean mesh plot_setup
 
+APPROACHES		= isotropic_dwr anisotropic_dwr weighted_hessian
 CONFIGS			= aligned staggered
 FIXED_MESHES	= 0 1 2 3 4
-TARGETS			=
-# TODO: set target complexities
+TARGETS			= 2500 5000 10000 20000 40000
 
-.PHONY	:= plot_energy, plot_inflow
+.PHONY	:= plot_dofs, plot_energy, plot_inflow, plot_power
 
 # --- Setup
 
 dir:
-	for approach in fixed_mesh hessian vorticity isotropic anisotropic; do \
+	for approach in fixed_mesh $(APPROACHES); do \
 		for config in $(CONFIGS); do \
 			mkdir -p plots/$$config/$$approach; \
 			mkdir -p outputs/$$config/$$approach; \
@@ -70,7 +70,9 @@ plot_setup:
 		python3 plot_mesh_reynolds_number.py $$config; \
 	done
 
-plot_fixed_mesh:
+plot_power: plot_power_fixed_mesh plot_power_adaptive
+
+plot_power_fixed_mesh:
 	for config in $(CONFIGS); do \
 		for level in $(FIXED_MESHES); do \
 			for mode in ramp run both; do \
@@ -79,7 +81,18 @@ plot_fixed_mesh:
 		done; \
 	done
 
-plot_energy:
+plot_power_adaptive:
+	for approach in $(APPROACHES); do \
+		for target in $(TARGETS); do \
+			for config in $(CONFIGS); do \
+				python3 plot_power.py $$config run -a $$approach --target_complexity $$target; \
+			done; \
+		done; \
+	done
+
+# TODO: plot_energy_adaptive
+
+plot_energy_fixed_mesh:
 	for config in $(CONFIGS); do \
 		for mode in ramp run both; do \
 			python3 plot_energy.py $$config $$mode; \
@@ -87,8 +100,16 @@ plot_energy:
 	done
 
 plot_inflow:
-	python3 plot_inflow.py -a fixed_mesh
-	python3 plot_inflow.py -a isotropic_dwr
+	for approach in fixed_mesh $(APPROACHES); do \
+		python3 plot_inflow.py -a $$approach; \
+	done
+
+plot_dofs:
+	for approach in $(APPROACHES); do \
+		for target in $(TARGETS); do \
+			python3 plot_dofs.py -a $$approach --target_complexity $$target; \
+		done; \
+	done
 
 
 # --- Cleanup
