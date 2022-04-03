@@ -3,6 +3,7 @@ from thetis.configuration import PositiveFloat, PositiveInteger
 from turbine_adapt.options import FarmOptions
 from pyroteus.utility import Mesh
 import numpy as np
+import os
 
 
 __all__ = ["ArrayOptions"]
@@ -34,8 +35,8 @@ class ArrayOptions(FarmOptions):
         self.column_ids = self.array_ids.transpose()
         self.farm_ids = tuple(self.column_ids.flatten())
         self.thrust_coefficient = 2.985
-        self.ramp_dir = kwargs.get("ramp_dir")
         self.ramp_level = kwargs.get("ramp_level", 0)
+        self.spunup = kwargs.get("spunup", True)
         self.configuration = configuration
         self.use_automatic_timestep = kwargs.get("use_automatic_timestep", False)
         self.max_courant_number = kwargs.get("max_courant_number", 10)
@@ -103,28 +104,25 @@ class ArrayOptions(FarmOptions):
         self.fields_to_export = kwargs.get("fields_to_export", ["uv_2d"])
         self.fields_to_export_hdf5 = kwargs.get("fields_to_export_hdf5", [])
 
-    @property
-    def ramp(self):
-        if self.ramp_dir is None:
-            return
-        fpath = f"{self.resource_dir}/{self.configuration}"
-        mesh_fname = f"{fpath}/channel_box_{self.ramp_level}"
-        ramp_mesh = Mesh(mesh_fname + ".msh")
-        ramp_file = os.path.join(self.ramp_dir, "ramp")
+    def ramp(self, fs=None):
+        pwd = os.path.abspath(os.path.dirname(__file__))
+        ramp_dir = f"{pwd}/outputs/{self.configuration}/fixed_mesh/level{self.ramp_level}/ramp/hdf5"
+        ramp_file = f"{ramp_dir}/Velocity2d_00400"  # FIXME: Avoid hard-code
+        if fs is None:
+            mesh2d = Mesh(f"{self.resource_dir}/{self.configuration}/channel_box_{self.ramp_level}.msh")
+            fs = get_functionspace(mesh2d, "DG", 1, vector=True) * get_functionspace(mesh2d, "DG", 1)
+        ramp = Function(fs)
+        uv, elev = ramp.split()
         if not os.path.exists(ramp_file + ".h5"):
             raise IOError(f"No ramp file found at {ramp_file}.h5")
         print_output(f"Using ramp file {ramp_file}.h5")
-        ramp = Function(
-            MixedFunctionSpace(
-                [
-                    VectorFunctionSpace(ramp_mesh, "DG", 1, name="U_2d"),
-                    get_functionspace(ramp_mesh, "DG", 1, name="H_2d"),
-                ]
-            )
-        )
-        uv, elev = ramp.split()
         with DumbCheckpoint(ramp_file, mode=FILE_READ) as chk:
             chk.load(uv, name="uv_2d")
+        ramp_file = os.path.join(ramp_dir, "Elevation2d_00400")
+        if not os.path.exists(ramp_file + ".h5"):
+            raise IOError(f"No ramp file found at {ramp_file}.h5")
+        print_output(f"Using ramp file {ramp_file}.h5")
+        with DumbCheckpoint(ramp_file, mode=FILE_READ) as chk:
             chk.load(elev, name="elev_2d")
         return ramp
 
@@ -224,15 +222,16 @@ class ArrayOptions(FarmOptions):
         forced boundary conditions. Otherwise, the spun-up
         solution field is loaded from file.
         """
-        u, eta = Function(solver_obj.function_spaces.V_2d).split()
+        fs = solver_obj.function_spaces.V_2d
+        u, eta = Function(fs).split()
 
-        if self.ramp_dir is None:
+        if self.spunup:
             u.interpolate(as_vector([1.0e-08, 0.0]))
             x, y = SpatialCoordinate(self.mesh2d)
             X = 2 * x / self.domain_length  # Non-dimensionalised x
             eta.interpolate(-self.max_amplitude * X)
         else:
-            u_ramp, eta_ramp = self.ramp.split()
+            u_ramp, eta_ramp = self.ramp(fs).split()
             u.project(u_ramp)
             eta.project(eta_ramp)
 
@@ -247,10 +246,9 @@ class ArrayOptions(FarmOptions):
         ), "First apply boundary conditions"
         tc = Constant(0.0)
         hmax = Constant(self.max_amplitude)
-        ramped = self.ramp_dir is not None
 
         def update_forcings(t):
-            tc.assign(t + self.ramp_time if ramped else t)
+            tc.assign(t + self.ramp_time if self.spunup else t)
             self.elev_in.assign(hmax * cos(self.omega * tc))
             self.elev_out.assign(hmax * cos(self.omega * tc + pi))
 

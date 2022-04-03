@@ -34,6 +34,7 @@ options = ArrayOptions(
     configuration=config,
     fields_to_export=[],
     fields_to_export_hdf5=["uv_2d", "elev_2d"],
+    spunup=False,
 )
 options.simulation_end_time = options.ramp_time
 options.create_tidal_farm()

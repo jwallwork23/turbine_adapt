@@ -28,7 +28,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         self.root_dir = root_dir
         self.integrated_quantity = kwargs.get("qoi", "energy")
         self.keep_log = False
-        self.qoi_farm_ids = kwargs.get("qoi_farm_ids", options.farm_ids)
+        self.qoi_farm_ids = np.array(kwargs.get("qoi_farm_ids", options.farm_ids))
 
         # Partition time interval
         dt = options.timestep
@@ -158,12 +158,11 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         initial elevation which satisfies
         the boundary conditions.
         """
-        q = Function(self.function_spaces.swe2d[0])
+        fs = self.function_spaces.swe2d[0]
+        q = Function(fs)
         u, eta = q.split()
-        ramp = self.options.ramp
-        assert ramp is not None
         print_output("Initialising with ramped hydrodynamics")
-        u_ramp, eta_ramp = ramp.split()
+        u_ramp, eta_ramp = self.options.ramp().split()
         u.project(u_ramp)
         eta.project(eta_ramp)
         return {"swe2d": q}
