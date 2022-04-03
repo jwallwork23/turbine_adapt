@@ -4,6 +4,7 @@ APPROACHES		= isotropic_dwr anisotropic_dwr weighted_hessian
 CONFIGS			= aligned staggered
 FIXED_MESHES	= 0 1 2 3 4
 TARGETS			= 2500 5000 10000 20000 40000
+NP				= 4
 
 .PHONY	:= plot_dofs, plot_energy, plot_inflow, plot_power
 
@@ -38,19 +39,19 @@ staggered_mesh:
 ramp:
 	for config in $(CONFIGS); do \
 		for level in $(FIXED_MESHES); do \
-			python3 ramp.py $$config --level $$level; \
+			mpiexec -np $(NP) python3 ramp.py $$config --level $$level; \
 		done; \
 	done
 
 longrun:
 	for config in $(CONFIGS); do \
-		python3 run_fixed_mesh.py $$config --level 0 --ramp_level 0 --num_tidal_cycles 3; \
+		mpiexec -np $(NP) python3 run_fixed_mesh.py $$config --level 0 --ramp_level 0 --num_tidal_cycles 3; \
 	done
 
 fixed_mesh:
 	for config in $(CONFIGS); do \
 		for level in $(FIXED_MESHES); do \
-			python3 run_fixed_mesh.py $$config --level $$level --ramp_level $$level; \
+			mpiexec -np $(NP) python3 run_fixed_mesh.py $$config --level $$level --ramp_level $$level; \
 		done; \
 	done
 
