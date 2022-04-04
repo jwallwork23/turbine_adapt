@@ -19,9 +19,16 @@ parser.add_argument(
     help="Apply a full LU decomposition",
     action="store_true",
 )
+parser.add_argument(
+    "--load_index",
+    help="Optional index to load from HDF5",
+    type=int,
+    default=None,
+)
 parser.parse_setup()
 parsed_args = parser.parse_args()
 config = parsed_args.configuration
+load_index = parsed_args.load_index
 
 # Set parameters
 ramp_level = parsed_args.ramp_level
@@ -44,7 +51,9 @@ options.output_directory = create_directory(output_dir)
 # Create solver
 solver_obj = FarmSolver(options)
 options.apply_boundary_conditions(solver_obj)
-solver_obj.add_callback(PowerOutputCallback(solver_obj), "timestep")
+cb = PowerOutputCallback(solver_obj)
+cb._create_new_file = load_index == 0
+solver_obj.add_callback(cb, "timestep")
 if parsed_args.plot_vorticity:
     vorticity_2d = Function(solver_obj.function_spaces.P1_2d, name="vorticity_2d")
     uv_2d = solver_obj.fields.uv_2d
@@ -66,7 +75,12 @@ if parsed_args.use_direct_solver:
         "pc_type": "lu",
         "pc_factor_mat_solver_type": "mumps",
     }
-options.apply_initial_conditions(solver_obj)
+if load_index is None:
+    options.apply_initial_conditions(solver_obj)
+else:
+    idx = parsed_args.load_index
+    print_output(f"Loading state at time {idx * options.simulation_export_time}")
+    solver_obj.load_state(idx)
 
 # Solve
 solver_obj.iterate(

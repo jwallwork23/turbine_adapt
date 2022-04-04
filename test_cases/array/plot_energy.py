@@ -57,6 +57,10 @@ for approach, levels in loops.items():
             energy_output["overall"][approach] = {}
         energy_output["overall"][approach][dofs] = sum(energy)
 
+# Plot formatting
+colours = ["b", "C0", "mediumturquoise", "mediumseagreen", "g"]
+kw = {"linewidth": 1.0}
+
 # Plot DoF count vs energy output
 plot_dir = create_directory(f"plots/{config}")
 for subset, byapproach in energy_output.items():
@@ -65,10 +69,27 @@ for subset, byapproach in energy_output.items():
         name = label.capitalize().replace("_", " ")
         dofs = list(bydof.keys())
         E = list(bydof.values())
-        axes.plot(dofs, E, "-x", label=name)
+        axes.plot(dofs, E, "-x", label=name, **kw)
     axes.set_xlabel(r"DoF count")
     axes.set_ylabel(r"Energy [$\mathrm{MW\,h}$]")
     axes.grid(True)
     axes.legend()
     plt.tight_layout()
     plt.savefig(f"{plot_dir}/{config}_energy_output_{subset}_{mode}.pdf")
+
+# Plot again by overlaid
+for approach, levels in loops.items():
+    fig, axes = plt.subplots()
+    for subset, byapproach in energy_output.items():
+        if subset == "overall":
+            continue
+        dofs = byapproach[approach].keys()
+        E = byapproach[approach].values()
+        kw["color"] = colours[subset]
+        axes.plot(dofs, E, "-x", label=subset, **kw)
+    axes.set_xlabel(r"DoF count")
+    axes.set_ylabel(r"Energy [$\mathrm{MW\,h}$]")
+    axes.grid(True)
+    axes.legend()
+    plt.tight_layout()
+    plt.savefig(f"{plot_dir}/{config}_energy_output_{approach}_01234_{mode}.pdf")
