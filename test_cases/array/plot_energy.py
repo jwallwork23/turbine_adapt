@@ -6,6 +6,8 @@ import h5py
 import numpy as np
 
 
+# TODO: use utils.get_data
+
 # Parse user input
 parser = Parser("test_cases/array/plot_convergence.py")
 parser.add_argument(

@@ -77,6 +77,7 @@ plot_power_fixed_mesh:
 	for config in $(CONFIGS); do \
 		for level in $(FIXED_MESHES); do \
 			for mode in ramp run both; do \
+				echo "Plotting $$config fixed mesh $$mode level $$level"; \
 				python3 plot_power.py $$config $$mode -a fixed_mesh --level $$level; \
 			done; \
 		done; \
