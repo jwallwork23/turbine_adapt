@@ -1,3 +1,4 @@
+from thetis.utility import AttrDict
 import argparse
 import numpy as np
 
@@ -216,3 +217,6 @@ class Parser(argparse.ArgumentParser):
             type=positive_int,
             default=0,
         )
+
+    def parse_args(self):
+        return AttrDict(vars(super().parse_args()))
