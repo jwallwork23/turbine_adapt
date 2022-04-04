@@ -3,10 +3,8 @@ from turbine_adapt.plotting import *
 from utils import *
 
 
-# TODO: use utils.get_data
-
 # Parse user input
-parser = Parser("test_cases/array/plot_convergence.py")
+parser = Parser("test_cases/array/plot_energy.py")
 parser.add_argument(
     "configuration",
     help="Name defining test case configuration",
@@ -28,8 +26,9 @@ modes = ["ramp", "run"] if mode == "both" else [mode]
 
 # Collect power/energy output data
 energy_output = {0: {}, 1: {}, 2: {}, 3: {}, 4: {}, "overall": {}}
-# loops = {"fixed_mesh": range(5), "isotropic": 5000.0 * 2.0 ** np.array(range(6))}
-loops = {"fixed_mesh": range(5)}
+# loops = {"fixed_mesh": range(5), "isotropic": 5000.0 * 2.0 ** np.array(range(6))}  # TODO
+# loops = {"fixed_mesh": range(5)}  # TODO
+loops = {"fixed_mesh": range(4)}
 for approach, levels in loops.items():
     parsed_args.approach = approach
     for level in levels:
@@ -46,7 +45,7 @@ for approach, levels in loops.items():
         output_dir = f"outputs/{config}/{approach}/level{level}"
         power, time, energy, energy_time = get_data(config, modes, parsed_args)[:4]
 
-        energy = time_integrate(power, time) / 3600.0  # MWh
+        energy = time_integrate(power, time)
         for i in range(5):
             if approach not in energy_output[i]:
                 energy_output[i][approach] = {}
@@ -90,6 +89,5 @@ for approach, levels in loops.items():
     axes.set_xlabel(r"DoF count")
     axes.set_ylabel(r"Energy [$\mathrm{MW\,h}$]")
     axes.grid(True)
-    axes.legend()
     plt.tight_layout()
     plt.savefig(f"{plot_dir}/{config}_energy_output_{approach}_01234_{mode}.pdf")
