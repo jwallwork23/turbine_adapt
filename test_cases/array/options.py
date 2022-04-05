@@ -241,9 +241,8 @@ class ArrayOptions(FarmOptions):
         """
         Simple tidal forcing with frequency :attr:`omega` and amplitude :attr:`max_amplitude`.
         """
-        assert hasattr(self, "elev_in") and hasattr(
-            self, "elev_out"
-        ), "First apply boundary conditions"
+        if not hasattr(self, "elev_in") or not hasattr(self, "elev_out"):
+            raise ValueError("First apply boundary conditions")
         tc = Constant(0.0)
         hmax = Constant(self.max_amplitude)
 
