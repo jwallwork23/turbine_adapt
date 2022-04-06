@@ -43,6 +43,17 @@ ticks = np.arange(np.floor(x[0]), x[-1] + 1.0, 10)
 times = (options.ramp_time + ticks / ticks[-1] * options.simulation_end_time) / options.tide_time
 ticklabels = [f"{t:.3f}" for t in times]
 
+# Print statistics
+for config, dof in dofs.items():
+    min = np.min(dof)
+    max = np.max(dof)
+    mean = np.mean(dof)
+    std = np.std(dof)
+    print(f"{config:9s}: min  {min/9:.0f} elements / {min:.0f} DoFs")
+    print(f"{config:9s}: max  {max/9:.0f} elements / {max:.0f} DoFs")
+    print(f"{config:9s}: mean {mean/9:.0f} elements / {mean:.0f} DoFs")
+    print(f"{config:9s}: std  {std/9:.0f} elements / {std:.0f} DoFs")
+
 # Plot DoF counts as a bar chart
 fig, axes = plt.subplots()
 n = len(dofs.keys())
@@ -51,7 +62,7 @@ for i, (config, dof) in enumerate(dofs.items()):
 axes.set_xticks(ticks)
 axes.set_xticklabels(ticklabels)
 axes.set_xlim([ticks[0], ticks[-1]])
-axes.set_ylim([0, 900])
+# axes.set_ylim([0, 900])
 axes.set_xlabel(r"Time/$T_{\mathrm{tide}}$")
 axes.set_ylabel(r"DoF count ($\times10^3$)")
 axes.legend(fontsize=16)
