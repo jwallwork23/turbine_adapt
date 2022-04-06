@@ -16,7 +16,6 @@ parser.add_argument(
     "--columns",
     nargs="+",
     help="Turbine columns to use in QoI",
-    choices=[0, 1, 2, 3, 4],
     default=[0, 1, 2, 3, 4],
 )
 parser.parse_setup()
@@ -27,7 +26,7 @@ parser.parse_approach()
 parser.parse_loading()
 parsed_args = parser.parse_args()
 config = parsed_args.config
-cols = parsed_args.columns
+cols = np.sort([int(c) for c in parsed_args.columns])
 target = parsed_args.target_complexity
 approach = parsed_args.approach
 ramp_level = parsed_args.ramp_level
