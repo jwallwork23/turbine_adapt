@@ -23,6 +23,13 @@ parser.add_argument(
     help="Plot the overall power as well as column-wise?",
     action="store_true",
 )
+parser.add_argument(
+    "-c",
+    "--columns",
+    nargs="+",
+    help="Turbine columns to use in QoI",
+    default=[0, 1, 2, 3, 4],
+)
 parser.parse_setup()
 parser.parse_approach(default="fixed_mesh")
 parser.parse_metric_parameters()
@@ -31,6 +38,10 @@ configs = parsed_args.configurations
 if len(configs) == 0:
     print("Nothing to plot.")
     sys.exit(0)
+cols = np.sort([int(c) for c in parsed_args.columns])
+ext = "".join([str(c) for c in cols])
+if ext != "01234":
+    parsed_args.approach += "_" + ext
 approach = parsed_args.approach
 mode = parsed_args.mode
 modes = ["ramp", "run"] if mode == "both" else [mode]
@@ -67,7 +78,13 @@ for config in configs:
     axes.set_ylim([0, ymax])
     axes.grid(True)
     lines, labels = axes.get_legend_handles_labels()
-    l = ["\n".join([config.capitalize(), "(fixed)" if approach == "fixed_mesh" else "(adaptive)"])]
+    if ext == "":
+        l = ["\n".join([config.capitalize(), "(fixed)" if approach == "fixed_mesh" else "(adaptive)"])]
+    elif len(ext) == 1:
+        l = [f"Column {int(ext)+1}"]
+    else:
+        cols = ", ".join([int(e) + 1 for e in ext.split(",")])
+        l = [f"Columns {cols}"]
     axes.legend([whiteline], l, loc="upper right", handlelength=0, handletextpad=0, fontsize=18)
     plt.tight_layout()
     cmb = "_combined" if parsed_args.combine_plots else ""
@@ -110,4 +127,4 @@ axes.grid(True)
 plt.tight_layout()
 config = "_".join(configs)
 plot_dir = create_directory(f"plots/{config}/{approach}/{run}")
-plt.savefig(f"{plot_dir}/{config}_total_power_output_{run}_{mode}.pdf")
+plt.savefig(f"{plot_dir}/{config}_{approach}_total_power_output_{run}_{mode}.pdf")
