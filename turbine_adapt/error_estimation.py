@@ -621,37 +621,22 @@ class ErrorEstimator(object):
         Recover the Laplacian of solution
         tuple `(uv, elev)`.
         """
-        P1_vec = VectorFunctionSpace(self.mesh, "CG", 1)
-        g, phi = TrialFunction(P1_vec), TestFunction(P1_vec)
-        a = inner(phi, g) * self.dx
-        sp = {
-            "ksp_type": "gmres",
-            "ksp_gmres_restart": 20,
-            "ksp_rtol": 1.0e-05,
-            "pc_type": "sor",
-        }
-        projections = [Function(P1_vec) for i in range(3)]
-        for f, proj in zip((uv[0], uv[1], elev), projections):
-            L = f * dot(phi, self.n) * self.ds - div(phi) * f * self.dx
-            solve(a == L, proj, solver_parameters=sp)
-        if self.norm_type == "L1":
-            return [interpolate(abs(div(proj)), self.P0) for proj in projections]
-        else:
-            return [
-                sqrt(interpolate(inner(div(proj), div(proj)), self.P0))
-                for proj in projections
-            ]
+        hessians = self.recover_hessians(uv, elev)
+        laps = [abs(H[0, 0] + H[1, 1]) for H in hessians]
+        p = 1 if self.norm_type == "L1" else 2
+        return [interpolate(L ** p, self.P1) ** (1 / p) for L in laps]
 
     @PETSc.Log.EventDecorator("ErrorEstimator.recover_hessians")
-    def recover_hessians(self, uv, elev):
+    def recover_hessians(self, uv, elev, method="Clement"):
         """
         Recover the Hessian of solution
         tuple `(uv, elev)`.
         """
+        kw = dict(mesh=self.mesh, method=method)
         return [
-            hessian_metric(recover_hessian(uv[0], mesh=self.mesh)),
-            hessian_metric(recover_hessian(uv[1], mesh=self.mesh)),
-            hessian_metric(recover_hessian(elev, mesh=self.mesh)),
+            hessian_metric(recover_hessian(uv[0], **kw)),
+            hessian_metric(recover_hessian(uv[1], **kw)),
+            hessian_metric(recover_hessian(elev, **kw)),
         ]
 
     @PETSc.Log.EventDecorator("ErrorEstimator.difference_quotient")
