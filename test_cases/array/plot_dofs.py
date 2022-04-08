@@ -72,10 +72,12 @@ for key, dof in dofs.items():
     max = np.max(dof)
     mean = np.mean(dof)
     std = np.std(dof)
-    print(f"{key:9s}: min  {min/9:.0f} elements / {min:.0f} DoFs")
-    print(f"{key:9s}: max  {max/9:.0f} elements / {max:.0f} DoFs")
-    print(f"{key:9s}: mean {mean/9:.0f} elements / {mean:.0f} DoFs")
-    print(f"{key:9s}: std  {std/9:.0f} elements / {std:.0f} DoFs")
+    total = np.sum(dof)
+    print(f"{key:9s}: min   {min/9:.0f} elements / {min:.0f} DoFs")
+    print(f"{key:9s}: max   {max/9:.0f} elements / {max:.0f} DoFs")
+    print(f"{key:9s}: mean  {mean/9:.0f} elements / {mean:.0f} DoFs")
+    print(f"{key:9s}: std   {std/9:.0f} elements / {std:.0f} DoFs")
+    print(f"{key:9s}: total {total/9:.0f} elements / {total:.0f} DoFs")
 
 # Plot DoF counts as a bar chart
 fig, axes = plt.subplots()
