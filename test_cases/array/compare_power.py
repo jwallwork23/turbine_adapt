@@ -7,7 +7,7 @@ import sys
 
 
 # Load data
-approaches = ("fixed_mesh", "isotropic_dwr")
+approaches = ("fixed_mesh", "isotropic_dwr", "anisotropic_dwr")
 configs = ("aligned", "staggered")
 power = {}
 time = {}
@@ -34,16 +34,17 @@ nt = len(t)
 # Energy analysis
 for config in configs:
     P = power[config]["fixed_mesh"].reshape(nt, 5, 3)
-    Ph = power[config]["isotropic_dwr"].reshape(nt, 5, 3)
     E = time_integrate(np.sum(P, axis=2), t)
-    print(f"Fixed mesh energy for {config:10s}: {np.round(E, 2)}, {np.round(np.sum(E), 2)}")
-    Eh = time_integrate(np.sum(Ph, axis=2), t)
-    print(f"Adaptive energy for {config:10s}: {np.round(Eh, 2)}, {np.round(np.sum(Eh), 2)}")
-    err = np.round(100 * np.abs((E - Eh) / E), 1)
-    E = np.sum(E)
-    Eh = np.sum(Eh)
-    print(f"Relative energy error for {config:10s}: {err} %,"
-          f" {np.round(100 * np.abs((E - Eh) / E), 1)} %\n")
+    print(f"fixed_mesh     / {config:10s} energy       {np.round(E, 2)}, {np.round(np.sum(E), 2)}")
+    for approach in approaches[1:]:
+        head = f"{approach:15s}/ {config:10s}"
+        Ph = power[config][approach].reshape(nt, 5, 3)
+        Eh = time_integrate(np.sum(Ph, axis=2), t)
+        print(f"{head} energy       {np.round(Eh, 2)}, {np.round(np.sum(Eh), 2)}")
+        err = np.round(100 * np.abs((E - Eh) / E), 1)
+        overall = np.round(100 * np.abs((np.sum(E) - np.sum(Eh)) / np.sum(E)), 1)
+        print(f"{head} energy error {err} %, {overall} %")
+    print("")
 
 
 def Lp_norm(arr, p=1):
@@ -54,10 +55,13 @@ def Lp_norm(arr, p=1):
 p = 1
 for config in configs:
     P = power[config]
-    err = np.abs(P["fixed_mesh"] - P["isotropic_dwr"])
     pwr = power[config]["fixed_mesh"]
-    rel_Lp_err = Lp_norm(err.reshape(nt, 5, 3)) / Lp_norm(pwr.reshape(nt, 5, 3))
-    rel_Lp_err = np.round(100 * rel_Lp_err, 1)
-    err = Lp_norm(err.reshape(nt, 1, 15)) / Lp_norm(pwr.reshape(nt, 1, 15))
-    err = np.round(100 * err, 1)
-    print(f"Relative L{p:.0f} error for {config:10s}: {rel_Lp_err} %, {err} %")
+    for approach in approaches[1:]:
+        head = f"{approach:15s}/ {config:10s}"
+        err = np.abs(P["fixed_mesh"] - P[approach])
+        rel_Lp_err = Lp_norm(err.reshape(nt, 5, 3)) / Lp_norm(pwr.reshape(nt, 5, 3))
+        rel_Lp_err = np.round(100 * rel_Lp_err, 1)
+        err = Lp_norm(err.reshape(nt, 1, 15)) / Lp_norm(pwr.reshape(nt, 1, 15))
+        err = np.round(100 * err, 1)
+        print(f"{head} relative L{p:.0f} error {rel_Lp_err} %, {err} %")
+    print("")
