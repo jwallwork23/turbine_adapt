@@ -4,6 +4,7 @@ import h5py
 import numpy as np
 import os
 import sys
+from inflow_power import outputs
 
 
 # Load data
@@ -64,4 +65,25 @@ for config in configs:
         err = Lp_norm(err.reshape(nt, 1, 15)) / Lp_norm(pwr.reshape(nt, 1, 15))
         err = np.round(100 * err, 1)
         print(f"{head} relative L{p:.0f} error {rel_Lp_err} %, {err} %")
+    print("")
+
+
+# Relative energy analysis
+tol = 0.1
+ones = np.ones((5, 3, 5))
+for config in configs:
+    for approach in approaches:
+        power[config][approach] /= np.clip(np.outer(outputs[config]["P"], ones).reshape(1000, 15), tol, np.Inf)
+for config in configs:
+    P = power[config]["fixed_mesh"].reshape(nt, 5, 3)
+    E = time_integrate(np.sum(P, axis=2), t)
+    print(f"fixed_mesh     / {config:10s} relative energy       {np.round(E, 2)}, {np.round(np.sum(E), 2)}")
+    for approach in approaches[1:]:
+        head = f"{approach:15s}/ {config:10s}"
+        Ph = power[config][approach].reshape(nt, 5, 3)
+        Eh = time_integrate(np.sum(Ph, axis=2), t)
+        print(f"{head} relative energy       {np.round(Eh, 2)}, {np.round(np.sum(Eh), 2)}")
+        err = np.round(100 * np.abs((E - Eh) / E), 1)
+        overall = np.round(100 * np.abs((np.sum(E) - np.sum(Eh)) / np.sum(E)), 1)
+        print(f"{head} relative energy error {err} %, {overall} %")
     print("")
