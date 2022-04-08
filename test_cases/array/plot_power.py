@@ -78,18 +78,19 @@ for config in configs:
     axes.set_ylim([0, ymax])
     axes.grid(True)
     lines, labels = axes.get_legend_handles_labels()
-    if ext == "":
-        l = ["\n".join([config.capitalize(), "(fixed)" if approach == "fixed_mesh" else "(adaptive)"])]
+    if len(ext) == 5:
+        l = "fixed" if approach == "fixed_mesh" else approach.split("_dwr")[0]
+        l = ["\n".join([config.capitalize(), f"({l})"])]
     elif len(ext) == 1:
         l = [f"Column {int(ext)+1}"]
     else:
-        cols = ", ".join([int(e) + 1 for e in ext.split(",")])
+        cols = ", ".join([f"{int(e) + 1}" for e in ext])
         l = [f"Columns {cols}"]
     axes.legend([whiteline], l, loc="upper right", handlelength=0, handletextpad=0, fontsize=18)
     plt.tight_layout()
     cmb = "_combined" if parsed_args.combine_plots else ""
     plot_dir = create_directory(f"plots/{config}/{approach}/{run}")
-    plt.savefig(f"{plot_dir}/{config}_power_output_column_{run}_{mode}{cmb}.pdf")
+    plt.savefig(f"{plot_dir}/{config}_{approach}_power_output_column_{run}_{mode}{cmb}.pdf")
 
     # Plot legend separately
     fname = "plots/legend_column.pdf"
