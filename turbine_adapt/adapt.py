@@ -138,6 +138,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 solver_obj.exporters["vtk"].set_next_export_ix(i_export)
 
             # Setup QoI
+            self.J = 0
             qoi = self.get_qoi(i)
 
             def update_forcings(t):
@@ -196,6 +197,12 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
         return qoi
 
+    @pyadjoint.no_annotations
+    def _final_run(self):
+        print_output("\n--- Final forward run\n")
+        kw = dict(no_exports=False, compute_power=True)
+        self.get_checkpoints(solver_kwargs=kw, run_final_subinterval=True)
+
     def fixed_point_iteration(self, **parsed_args):
         """
         Apply a goal-oriented metric-based mesh adaptation
@@ -240,29 +247,57 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         num_subintervals = self.num_subintervals
         timesteps = [dt] * num_subintervals
         p = parsed_args.norm_order
+        if COMM_WORLD.size > 1:
+            raise NotImplementedError("Mmg2d only supports serial mesh adaptation")
 
         # Enter fixed point iteration
         miniter = parsed_args.miniter
         maxiter = parsed_args.maxiter
         if miniter > maxiter:
+            print_output(f"miniter {miniter} and maxiter {maxiter} are incompatible")
             miniter = maxiter
+            print_output(f"Setting miniter={miniter}, maxiter={maxiter}")
         qoi_rtol = parsed_args.qoi_rtol
         element_rtol = parsed_args.element_rtol
-        converged = False
         converged_reason = None
-        num_cells_old = None
-        J_old = None
         load_index = parsed_args.load_index
+        if load_index > 0:
+            self.keep_log = True
         fp_iteration = load_index
         msg = "Termination due to {:s} after {:d} iterations"
+        cells = [] if load_index == 0 else list(np.load(f"{output_dir}/num_cells_progress.npy"))
+        qois = [] if load_index == 0 else list(np.load(f"{output_dir}/J_progress.npy"))
+        self.J = 0 if load_index == 0 else qois[-1]
+
+        def check_cell_count_convergence():
+            if len(cells) >= max(2, miniter):
+                elements_converged = True
+                for nc, nc_old in zip(cells[-1], cells[-2]):
+                    if abs(nc - nc_old) > element_rtol * nc_old:
+                        elements_converged = False
+                        break
+                if elements_converged:
+                    return "converged element counts"
+
+        def check_qoi_convergence():
+            if len(qois) >= max(2, miniter):
+                if abs(qois[-1] - qois[-2]) < qoi_rtol * qois[-2]:
+                    return "converged quantity of interest"
+
+        # Check for convergence (of loaded data)
+        converged_reason = check_qoi_convergence() or check_cell_count_convergence()
+        if converged_reason is not None:
+            print_output(msg.format(converged_reason, fp_iteration + 1))
+            print_output(f"Energy output: {self.J/3.6e+09} MWh")
+            return
+
+        # Enter the fixed point iteration loop
         while fp_iteration <= maxiter:
             outfiles = AttrDict({})
             if fp_iteration < miniter:
-                converged = False
+                converged_reason = None
             elif fp_iteration == maxiter:
-                converged = True
-                if converged_reason is None:
-                    converged_reason = "maximum number of iterations reached"
+                converged_reason = converged_reason or "maximum number of iterations reached"
 
             # Ramp up the target complexity
             target_ramp = ramp_complexity(base, target, fp_iteration)
@@ -287,10 +322,9 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             loaded = False
             if fp_iteration == load_index:
                 for i, metric in enumerate(metric_fns):
-                    if load_index == 0:
-                        fname = f"{self.root_dir}/metric{i}"
-                    else:
-                        fname = f"{output_dir}/metric{i}_fp{fp_iteration}"
+                    fpath = self.root_dir if load_index == 0 else output_dir
+                    ext = "" if load_index == 0 else "_fp{fp_iteration}"
+                    fname = f"{fpath}/metric{i}{ext}"
                     if os.path.exists(fname + ".h5"):
                         print_output(f"\n--- Loading metric on mesh {i+1}\n{fname}")
                         try:
@@ -301,45 +335,30 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                             print_output(f"Cannot load metric data on mesh {i+1}")
                             loaded = False
                             break
+                    elif loaded:
+                        raise IOError("Remove partial metric data")
                     else:
-                        assert not loaded, "Only partial metric data available"
                         break
 
             # Otherwise, solve forward and adjoint
             if not loaded:
 
                 # Solve forward and adjoint on each subinterval
-                if converged:
-                    with pyadjoint.stop_annotating():
-                        print_output("\n--- Final forward run\n")
-                        self.get_checkpoints(
-                            solver_kwargs=dict(no_exports=False, compute_power=True),
-                            run_final_subinterval=True,
-                        )
-                else:
+                if converged_reason is None:
                     print_output(f"\n--- Forward-adjoint sweep {fp_iteration}\n")
                     solutions = self.solve_adjoint()
+                else:
+                    self._final_run()
 
                 # Check for QoI convergence
-                if J_old is not None:
-                    if (
-                        abs(self.J - J_old) < qoi_rtol * J_old
-                        and fp_iteration >= miniter
-                    ):
-                        converged = True
-                        converged_reason = "converged quantity of interest"
-                        with pyadjoint.stop_annotating():
-                            print_output("\n--- Final forward run\n")
-                            self.get_checkpoints(
-                                solver_kwargs=dict(
-                                    no_exports=False, compute_power=True
-                                ),
-                                run_final_subinterval=True,
-                            )
-                J_old = self.J
+                converged_reason = converged_reason or check_qoi_convergence()
+                if converged_reason is not None:
+                    self._final_run()
+                qois.append(self.J)
+                np.save(f"{output_dir}/J_progress.npy", qois)
 
                 # Escape if converged
-                if converged:
+                if converged_reason is not None:
                     print_output(msg.format(converged_reason, fp_iteration + 1))
                     print_output(f"Energy output: {self.J/3.6e+09} MWh")
                     break
@@ -429,26 +448,17 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             for i, metric in enumerate(metrics):
                 self.meshes[i] = Mesh(adapt(self.meshes[i], metric))
                 outfiles.mesh.write(self.meshes[i].coordinates)
-            num_cells = [mesh.num_cells() for mesh in self.meshes]
+            cells.append([mesh.num_cells() for mesh in self.meshes])
+            np.save(f"{output_dir}/num_cells_progress.npy", cells)
 
             # Check for convergence of element count
-            elements_converged = False
-            if num_cells_old is not None:
-                elements_converged = True
-                for nc, _nc in zip(num_cells, num_cells_old):
-                    if abs(nc - _nc) > element_rtol * _nc:
-                        elements_converged = False
-            num_cells_old = num_cells
-            if elements_converged:
-                converged = True
-                converged_reason = "converged element counts"
+            check_cell_count_convergence()
 
             # Save mesh data to disk
-            if COMM_WORLD.size == 1:
-                for i, mesh in enumerate(self.meshes):
-                    fname = f"{output_dir}/mesh_fp{fp_iteration+1}_{i}.h5"
-                    viewer = PETSc.Viewer().createHDF5(fname, "w")
-                    viewer(mesh.topology_dm)
+            for i, mesh in enumerate(self.meshes):
+                fname = f"{output_dir}/mesh_fp{fp_iteration+1}_{i}.h5"
+                viewer = PETSc.Viewer().createHDF5(fname, "w")
+                viewer(mesh.topology_dm)
 
             # Increment
             fp_iteration += 1
