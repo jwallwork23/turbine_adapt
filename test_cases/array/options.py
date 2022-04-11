@@ -27,7 +27,7 @@ class ArrayOptions(FarmOptions):
     domain_length = PositiveFloat(3000.0).tag(config=False)
     domain_width = PositiveFloat(1000.0).tag(config=False)
 
-    def __init__(self, configuration="aligned", meshgen=False, mesh=None, **kwargs):
+    def __init__(self, configuration="aligned", meshgen=False, mesh=None, uniform=False, **kwargs):
         super(ArrayOptions, self).__init__()
         self.array_ids = np.array(
             [[2, 5, 8, 11, 14], [3, 6, 9, 12, 15], [4, 7, 10, 13, 16]]
@@ -36,6 +36,7 @@ class ArrayOptions(FarmOptions):
         self.farm_ids = tuple(self.column_ids.flatten())
         self.thrust_coefficient = 2.985
         self.ramp_level = kwargs.get("ramp_level", 0)
+        self.uniform = uniform
         self.spunup = kwargs.get("spunup", True)
         self.configuration = configuration
         self.use_automatic_timestep = kwargs.get("use_automatic_timestep", False)
@@ -54,9 +55,9 @@ class ArrayOptions(FarmOptions):
         # Domain and mesh
         if mesh is None:
             level = kwargs.get("level", 0)
-            self.mesh_file = (
-                f"{self.resource_dir}/{configuration}/channel_box_{level}.msh"
-            )
+            fpath = f"{self.resource_dir}/{configuration}"
+            label = "uniform" if uniform else "box"
+            self.mesh_file = f"{fpath}/channel_{label}_{level}.msh"
             if meshgen:
                 return
             elif os.path.exists(self.mesh_file):
@@ -105,11 +106,21 @@ class ArrayOptions(FarmOptions):
         self.fields_to_export_hdf5 = kwargs.get("fields_to_export_hdf5", [])
 
     def ramp(self, fs=None):
+        """
+        Load spun-up state from file.
+
+        :kwarg fs: if not ``None``, the spun-up state will be
+            projected into this :class:`FunctionSpace`.
+        """
         pwd = os.path.abspath(os.path.dirname(__file__))
-        ramp_dir = f"{pwd}/outputs/{self.configuration}/fixed_mesh/level{self.ramp_level}/ramp/hdf5"
-        ramp_file = f"{ramp_dir}/Velocity2d_00400"  # FIXME: Avoid hard-code
+        approach = "uniform_mesh" if self.uniform else "fixed_mesh"
+        ramp_dir = f"{pwd}/outputs/{self.configuration}/{approach}/level{self.ramp_level}/ramp/hdf5"
+        idx = int(np.round(self.ramp_time/self.simulation_export_time))
+        ramp_file = f"{ramp_dir}/Velocity2d_{idx:05d}"
         if fs is None:
-            mesh2d = Mesh(f"{self.resource_dir}/{self.configuration}/channel_box_{self.ramp_level}.msh")
+            label = "uniform" if self.uniform else "box"
+            fpath = f"{self.resource_dir}/{self.configuration}"
+            mesh2d = Mesh(f"{fpath}/channel_{label}_{self.ramp_level}.msh")
             fs = get_functionspace(mesh2d, "DG", 1, vector=True) * get_functionspace(mesh2d, "DG", 1)
         ramp = Function(fs)
         uv, elev = ramp.split()
@@ -118,7 +129,7 @@ class ArrayOptions(FarmOptions):
         print_output(f"Using ramp file {ramp_file}.h5")
         with DumbCheckpoint(ramp_file, mode=FILE_READ) as chk:
             chk.load(uv, name="uv_2d")
-        ramp_file = os.path.join(ramp_dir, "Elevation2d_00400")
+        ramp_file = os.path.join(ramp_dir, f"Elevation2d_{idx:05d}")
         if not os.path.exists(ramp_file + ".h5"):
             raise IOError(f"No ramp file found at {ramp_file}.h5")
         print_output(f"Using ramp file {ramp_file}.h5")

@@ -27,10 +27,12 @@ parser.add_argument(
 parsed_args = parser.parse_args()
 config = parsed_args.configuration
 load_index = parsed_args.load_index
+approach = "uniform_mesh" if parsed_args.uniform else "fixed_mesh"
 
 # Set parameters
 options = ArrayOptions(
     level=parsed_args.level,
+    uniform=parsed_args.uniform,
     configuration=config,
     fields_to_export=[],
     fields_to_export_hdf5=["uv_2d", "elev_2d"],
@@ -38,8 +40,7 @@ options = ArrayOptions(
 )
 options.simulation_end_time = options.ramp_time
 options.create_tidal_farm()
-output_dir = options.output_directory
-output_dir += f"/{config}/fixed_mesh/level{parsed_args.level}/ramp"
+output_dir = f"{options.output_directory}/{config}/{approach}/level{parsed_args.level}/ramp"
 options.output_directory = create_directory(output_dir)
 
 # Setup solver

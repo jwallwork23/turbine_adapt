@@ -29,10 +29,11 @@ config = parsed_args.config
 cols = np.sort([int(c) for c in parsed_args.columns])
 target = parsed_args.target_complexity
 approach = parsed_args.approach
+ramp_approach = parsed_args.ramp_approach
 ramp_level = parsed_args.ramp_level
 
 # Mesh independent setup
-ramp_dir = f"outputs/{config}/fixed_mesh/level{ramp_level}/ramp/hdf5"
+ramp_dir = f"outputs/{config}/{ramp_approach}/level{ramp_level}/ramp/hdf5"
 options = ArrayOptions(
     level=parsed_args.level,
     configuration=config,

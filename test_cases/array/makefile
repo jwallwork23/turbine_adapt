@@ -3,12 +3,13 @@ all: dir clean mesh plot_setup
 APPROACHES		= isotropic_dwr anisotropic_dwr weighted_hessian
 CONFIGS			= aligned staggered
 FIXED_MESHES	= 0 1 2 3 4
+UNIFORM_MESHES	= 0 1
 COLUMNS			= {0,1,2,3,4} 2 4
 TARGETS			= 10000
 MODES			= ramp run both
 NP				= 4
 
-.PHONY	:= plot_dofs, plot_energy, plot_inflow, plot_power
+.PHONY	:= aligned, staggered, plot_dofs, plot_energy, plot_inflow, plot_power
 
 # --- Setup
 
@@ -25,15 +26,21 @@ mesh: aligned_mesh staggered_mesh
 
 aligned_mesh:
 	for level in $(FIXED_MESHES); do \
-		python3 meshgen.py aligned $$level; \
+		python3 meshgen.py aligned --level $$level; \
 	done
-	cd resources && make aligned_mesh
+	for level in $(UNIFORM_MESHES); do \
+		python3 meshgen.py aligned --level $$level --uniform; \
+	done
+	cd resources/aligned && make
 
 staggered_mesh:
 	for level in $(FIXED_MESHES); do \
-		python3 meshgen.py staggered $$level; \
+		python3 meshgen.py staggered --level $$level; \
 	done
-	cd resources && make staggered_mesh
+	for level in $(UNIFORM_MESHES); do \
+		python3 meshgen.py staggered --level $$level --uniform; \
+	done
+	cd resources/staggered && make
 
 
 # --- Runs

@@ -66,6 +66,11 @@ class Parser(argparse.ArgumentParser):
             default=4,
         )
         self.add_argument(
+            "--uniform",
+            help="Use a uniform initial_mesh",
+            action="store_true",
+        )
+        self.add_argument(
             "--end_time",
             help="Simulation end time in seconds",
             type=positive_float,
@@ -117,10 +122,18 @@ class Parser(argparse.ArgumentParser):
             help="Adaptive approach to consider",
             choices=[
                 "fixed_mesh",
+                "uniform_mesh",
                 "isotropic_dwr",
                 "anisotropic_dwr",
                 "weighted_hessian",
             ],
+            default=default,
+        )
+        self.add_argument(
+            "-r",
+            "--ramp-approach",
+            help="Meshing approach used for ramp",
+            choices=["fixed_mesh", "uniform_mesh"],
             default=default,
         )
 
