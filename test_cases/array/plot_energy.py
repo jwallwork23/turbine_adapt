@@ -26,25 +26,31 @@ modes = ["ramp", "run"] if mode == "both" else [mode]
 
 # Collect power/energy output data
 energy_output = {0: {}, 1: {}, 2: {}, 3: {}, 4: {}, "overall": {}}
-# loops = {"fixed_mesh": range(5), "isotropic": 5000.0 * 2.0 ** np.array(range(6))}  # TODO
-# loops = {"fixed_mesh": range(5)}  # TODO
-loops = {"fixed_mesh": range(4)}
+loops = {
+    "fixed_mesh": range(4),
+    "isotropic_dwr": 5000.0 * 2.0 ** np.array(range(2)),  # TODO: 4 levels
+    # "anisotropic_dwr": 2500.0 * 2.0 ** np.array(range(4)),  # TODO
+}
+if mode != "run":
+    loops.pop("isotropic_dwr")
 for approach, levels in loops.items():
     parsed_args.approach = approach
     for level in levels:
-        parsed_args.level = level
-        # parsed_args.target_complexity =
-        if approach == "fixed_mesh":
-            options = ArrayOptions(level=level, configuration=config)
-            if options.element_family == "dg-dg":
-                dofs = 9 * options.mesh2d.num_cells()
-            else:
-                raise NotImplementedError
-        else:
-            raise NotImplementedError  # TODO: Read from log?
-        output_dir = f"outputs/{config}/{approach}/level{level}"
-        power, time, energy, energy_time = get_data(config, modes, parsed_args)[:4]
 
+        # Count DoFs
+        if approach == "fixed_mesh":
+            parsed_args.level = level
+            options = ArrayOptions(level=level, configuration=config)
+            dofs = 9 * options.mesh2d.num_cells()  # NOTE: assumes P1DG-P1DG
+        else:
+            parsed_args.target_complexity = level
+            cells = count_cells(f"outputs/{config}/{approach}/target{level:.0f}")
+            dofs = 9 * np.mean(cells)  # NOTE: assumes P1DG-P1DG
+
+        # Load data
+        power, time = get_data(config, modes, parsed_args)[:2]
+
+        # Compute energy output
         energy = time_integrate(power, time)
         for i in range(5):
             if approach not in energy_output[i]:
@@ -69,7 +75,7 @@ for subset, byapproach in energy_output.items():
         dofs = list(bydof.keys())
         E = list(bydof.values())
         axes.plot(dofs, E, "-x", label=name, **kw)
-    axes.set_xlabel(r"DoF count")
+    axes.set_xlabel(r"Mean DoF count")
     axes.set_ylabel(r"Energy [$\mathrm{MW\,h}$]")
     axes.grid(True)
     axes.legend()
@@ -86,7 +92,7 @@ for approach, levels in loops.items():
         E = byapproach[approach].values()
         kw["color"] = colours[subset]
         axes.plot(dofs, E, "-x", label=subset, **kw)
-    axes.set_xlabel(r"DoF count")
+    axes.set_xlabel(r"Mean DoF count")
     axes.set_ylabel(r"Energy [$\mathrm{MW\,h}$]")
     axes.grid(True)
     plt.tight_layout()

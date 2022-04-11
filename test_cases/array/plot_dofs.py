@@ -1,30 +1,9 @@
 from turbine_adapt.parse import Parser
 from turbine_adapt.plotting import *  # noqa
 from options import ArrayOptions
-import meshio
+from utils import count_cells
 import matplotlib.pyplot as plt
 import numpy as np
-
-
-def count_cells(fpath):
-    """
-    Look at the Mesh_*.vtu files in a given filepath
-    and count the cells in each.
-    """
-    cells = []
-    for i in range(40):
-        fname = f"{fpath}/Mesh2d_{i}.vtu"
-        if not os.path.exists(fname):
-            print(f"File {fname} does not exist.")
-            break
-        mesh = meshio.read(fname)
-        for cell_block in mesh.cells:
-            if cell_block.type in ("triangle"):
-                num_cells = len(cell_block)
-                print(f"{i:2d}: {num_cells:6d} elements, {len(mesh.points):6d} vertices")
-                cells.append(num_cells)
-                continue
-    return cells
 
 
 # Parse user input

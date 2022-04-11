@@ -1,5 +1,6 @@
 from options import ArrayOptions
 import h5py
+import meshio
 import numpy as np
 import os
 import sys
@@ -103,3 +104,24 @@ def get_data(config, modes, namespace, eps=1.0e-05):
     figsize = (4.4 + 2 * (end_time - 1 if mode == "run" else end_time), 4.8)
 
     return power, time, energy, energy_time, end_time, run, ticks, figsize
+
+
+def count_cells(fpath):
+    """
+    Look at the Mesh_*.vtu files in a given filepath
+    and count the cells in each.
+    """
+    cells = []
+    for i in range(40):
+        fname = f"{fpath}/Mesh2d_{i}.vtu"
+        if not os.path.exists(fname):
+            print(f"File {fname} does not exist.")
+            break
+        mesh = meshio.read(fname)
+        for cell_block in mesh.cells:
+            if cell_block.type in ("triangle"):
+                num_cells = len(cell_block)
+                print(f"{i:2d}: {num_cells:6d} elements, {len(mesh.points):6d} vertices")
+                cells.append(num_cells)
+                continue
+    return cells
