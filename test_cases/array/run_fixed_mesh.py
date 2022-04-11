@@ -20,6 +20,11 @@ parser.add_argument(
     action="store_true",
 )
 parser.add_argument(
+    "--uniform",
+    help="Use a uniform mesh",
+    action="store_true",
+)
+parser.add_argument(
     "--load_index",
     help="Optional index to load from HDF5",
     type=int,
