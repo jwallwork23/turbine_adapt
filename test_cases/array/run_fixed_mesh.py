@@ -37,8 +37,9 @@ load_index = parsed_args.load_index
 approach = "uniform_mesh" if parsed_args.uniform else "fixed_mesh"
 
 # Set parameters
+nproc = COMM_WORLD.size
 ramp_level = parsed_args.ramp_level
-ramp_dir = f"outputs/{config}/{approach}/level{ramp_level}/ramp/hdf5"
+ramp_dir = f"outputs/{config}/{approach}/level{ramp_level}/ramp{nproc}/hdf5"
 options = ArrayOptions(
     level=parsed_args.level,
     uniform=parsed_args.uniform,

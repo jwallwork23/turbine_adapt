@@ -27,24 +27,24 @@ parser.parse_loading()
 parsed_args = parser.parse_args()
 config = parsed_args.config
 cols = np.sort([int(c) for c in parsed_args.columns])
-target = parsed_args.target_complexity
-approach = parsed_args.approach
-ramp_approach = parsed_args.ramp_approach
-ramp_level = parsed_args.ramp_level
 
 # Mesh independent setup
-ramp_dir = f"outputs/{config}/{ramp_approach}/level{ramp_level}/ramp/hdf5"
+nproc = COMM_WORLD.size
+ramp_approach = parsed_args.ramp_approach
+ramp_level = parsed_args.ramp_level
+ramp_dir = f"outputs/{config}/{ramp_approach}/level{ramp_level}/ramp{nproc}/hdf5"
 options = ArrayOptions(
     level=parsed_args.level,
     configuration=config,
     ramp_level=ramp_level,
     ramp_dir=ramp_dir,
 )
-options.simulation_end_time = (
-    parsed_args.end_time or parsed_args.num_tidal_cycles * options.tide_time
-)
+num_cycles = parsed_args.num_tidal_cycles
+options.simulation_end_time = parsed_args.end_time or num_cycles * options.tide_time
 
 # Select columns to add to the QoI
+approach = parsed_args.approach
+target = parsed_args.target_complexity
 qoi_farm_ids = tuple(np.vstack([options.column_ids[c] for c in cols]).flatten())
 print_output(f"Using a QoI based on columns {cols}")
 print_output(f"i.e. farm IDs {qoi_farm_ids}")
@@ -54,11 +54,9 @@ if len(cols) != 5:
 options.output_directory = create_directory(f"{root_dir}/target{target:.0f}")
 print_output(f"Outputting to {options.output_directory}")
 
-# Run simulation
+# Create farm and run simulation
+num_meshes = parsed_args.num_meshes
 tidal_farm = GoalOrientedTidalFarm(
-    options,
-    root_dir,
-    parsed_args.num_meshes,
-    qoi_farm_ids=qoi_farm_ids,
+    options, root_dir, num_meshes, qoi_farm_ids=qoi_farm_ids
 )
-tidal_farm.fixed_point_iteration(**vars(parsed_args))
+tidal_farm.fixed_point_iteration(**parsed_args)

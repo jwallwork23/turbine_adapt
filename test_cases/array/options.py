@@ -161,18 +161,12 @@ class ArrayOptions(FarmOptions):
         :attr:`base_viscosity` elsewhere.
         """
         self.horizontal_viscosity = Function(fs, name="Horizontal viscosity")
+        target = self.target_viscosity
+        base = self.base_viscosity
 
         # Get box around tidal farm
-        D = self.turbine_diameter
-        delta_x = 3 * 10 * D
-        delta_y = 1.3 * 7.5 * D
-
-        # Base viscosity and minimum viscosity
-        nu_tgt = self.target_viscosity
-        nu_base = self.base_viscosity
-        if np.isclose(nu_tgt, nu_base):
-            nu.assign(nu_base)
-            return nu
+        delta_x = 1000.0
+        delta_y = 250.0
 
         # Distance functions
         x, y = SpatialCoordinate(self.mesh2d)
@@ -186,30 +180,20 @@ class ArrayOptions(FarmOptions):
                 And(x > -delta_x, x < delta_x),
                 conditional(
                     And(y > -delta_y, y < delta_y),
-                    nu_tgt,
-                    min_value(nu_tgt * (1 - dist_y) + nu_base * dist_y, nu_base),
+                    target,
+                    min_value(target * (1 - dist_y) + base * dist_y, base),
                 ),
                 conditional(
                     And(y > -delta_y, y < delta_y),
-                    min_value(nu_tgt * (1 - dist_x) + nu_base * dist_x, nu_base),
-                    min_value(nu_tgt * (1 - dist_r) + nu_base * dist_r, nu_base),
+                    min_value(target * (1 - dist_x) + base * dist_x, base),
+                    min_value(target * (1 - dist_r) + base * dist_r, base),
                 ),
             )
         )
 
         # Enforce maximum Reynolds number
-        Re_h, Re_h_min, Re_h_max = self.check_mesh_reynolds_number(
-            self.horizontal_viscosity
-        )
-        if Re_h_max > self.max_mesh_reynolds_number:
-            nu_enforced = self.enforce_mesh_reynolds_number(self.horizontal_viscosity)
-            self.horizontal_viscosity.interpolate(
-                conditional(
-                    Re_h > self.max_mesh_reynolds_number,
-                    nu_enforced,
-                    self.horizontal_viscosity,
-                )
-            )
+        self.enforce_mesh_reynolds_number()
+        self.check_mesh_reynolds_number()
 
     def get_bnd_conditions(self, V_2d):
         self.elev_in = Function(V_2d.sub(1))

@@ -106,9 +106,9 @@ for col in range(5):
 if not uniform:
     code += "\n// Refined region around the turbines\n"
     if config == "aligned":
-        point_str = "Point(%d) = {%d*3*deltax, %d*1.3*deltay, 0, dxfarm};\n"
+        point_str = "Point(%d) = {%d * 1000, %d * 250, 0, dxfarm};\n"
     elif config == "staggered":
-        point_str = "Point(%d) = {%d*3*deltax, %d*1.55*deltay, 0, dxfarm};\n"
+        point_str = "Point(%d) = {%d * 1000, %d * 250, 0, dxfarm};\n"
     else:
         raise NotImplementedError  # TODO
     for s1, s2 in zip(*signs):

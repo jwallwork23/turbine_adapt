@@ -85,8 +85,8 @@ for i, loc in enumerate(centres):
     if i % 3 == 0:
         patches.append(patch)
     axes.add_patch(patch)
-w = 1700
-d = 450
+w = 2000
+d = 500
 patch_kwargs["edgecolor"] = "gray"
 patch = ptch.Rectangle((-w / 2, -d / 2), w, d, **patch_kwargs)
 patches.append(patch)

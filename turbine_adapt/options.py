@@ -179,15 +179,12 @@ class FarmOptions(ModelOptions2d):
         farm_options.break_even_wattage = self.break_even_wattage
         self.tidal_turbine_farms = {farm_id: farm_options for farm_id in self.farm_ids}
 
-    def check_mesh_reynolds_number(self, nu=None, mesh=None):
+    def check_mesh_reynolds_number(self):
         """
-        Compute the mesh Reynolds number for a given viscosity field.
+        Compute the mesh Reynolds number for the horizontal viscosity field.
         """
-        nu = nu or self.horizontal_viscosity
-        if isinstance(nu, Constant) and np.isclose(nu.values()[0], 0.0):
-            print_output("Cannot compute mesh Reynolds number for inviscid problems!")
-            return 3 * [None]
-        mesh = mesh or nu.function_space().mesh()
+        nu = self.horizontal_viscosity
+        mesh = nu.function_space().mesh()
         u = self.horizontal_velocity_scale
         fs = (
             get_functionspace(mesh, "CG", 1)
@@ -205,29 +202,24 @@ class FarmOptions(ModelOptions2d):
         print_output("min(Re_h)  = {:11.4e} {:1s} 1".format(Re_h_min, lg(Re_h_min)))
         print_output("max(Re_h)  = {:11.4e} {:1s} 1".format(Re_h_max, lg(Re_h_max)))
         print_output("mean(Re_h) = {:11.4e} {:1s} 1".format(Re_h_mean, lg(Re_h_mean)))
-        return Re_h, Re_h_min, Re_h_max
+        return Re_h
 
-    def enforce_mesh_reynolds_number(self, nu):
+    def enforce_mesh_reynolds_number(self):
         """
-        Enforce the mesh Reynolds number specified by :attr:`max_mesh_reynolds_number`.
+        Enforce the maximum mesh Reynolds number specified by
+        :attr:`max_mesh_reynolds_number`.
         """
-        Re_h = self.max_mesh_reynolds_number
-        if Re_h is None:
-            raise ValueError(
-                "Cannot enforce mesh Reynolds number if it isn't specified!"
-            )
+        nu = self.horizontal_viscosity
+        Re_h = self.check_mesh_reynolds_number()
+        Re_h_max = self.max_mesh_reynolds_number
         u = self.horizontal_velocity_scale
         if u is None:
             raise ValueError(
                 "Cannot enforce mesh Reynolds number without characteristic velocity!"
             )
-        print_output("Enforcing mesh Reynolds number {:.4e}...".format(Re_h))
-
-        # Compute viscosity which yields target mesh Reynolds number
-        _nu = Function(nu, name="Modified viscosity")
-        _nu.project(self.mesh2d.delta_x * u / Re_h)
-        _nu.interpolate(max_value(_nu, 0.0))
-        return _nu
+        print_output(f"Enforcing maximum mesh Reynolds number {Re_h_max:.2e}")
+        h = nu.function_space().mesh().delta_x
+        nu.interpolate(conditional(Re_h >= Re_h_max, h * u / Re_h_max, nu))
 
     def get_depth(self, mode=None):
         if mode is None:
