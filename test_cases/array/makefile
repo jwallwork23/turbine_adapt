@@ -14,7 +14,7 @@ NP				= 4
 # --- Setup
 
 dir:
-	for approach in fixed_mesh $(APPROACHES); do \
+	for approach in fixed_mesh uniform_mesh $(APPROACHES); do \
 		for config in $(CONFIGS); do \
 			mkdir -p plots/$$config/$$approach; \
 			mkdir -p outputs/$$config/$$approach; \

@@ -22,7 +22,7 @@ parser.add_argument(
     "--load_index",
     help="Optional index to load from HDF5",
     type=int,
-    default=None,
+    default=0,
 )
 parsed_args = parser.parse_args()
 config = parsed_args.configuration
@@ -34,13 +34,14 @@ options = ArrayOptions(
     level=parsed_args.level,
     uniform=parsed_args.uniform,
     configuration=config,
-    fields_to_export=[],
+    fields_to_export=["uv_2d"],
     fields_to_export_hdf5=["uv_2d", "elev_2d"],
     spunup=False,
 )
 options.simulation_end_time = options.ramp_time
 options.create_tidal_farm()
-output_dir = f"{options.output_directory}/{config}/{approach}/level{parsed_args.level}/ramp"
+nproc = COMM_WORLD.size
+output_dir = f"{options.output_directory}/{config}/{approach}/level{parsed_args.level}/ramp{nproc}"
 options.output_directory = create_directory(output_dir)
 
 # Setup solver
@@ -62,7 +63,7 @@ if parsed_args.plot_vorticity:
         preproc_func=vorticity_calculator.solve,
     )
     options.fields_to_export.append("vorticity_2d")
-if load_index is None:
+if load_index == 0:
     options.apply_initial_conditions(solver_obj)
 else:
     idx = parsed_args.load_index

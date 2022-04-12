@@ -41,6 +41,11 @@ class ArrayOptions(FarmOptions):
         self.configuration = configuration
         self.use_automatic_timestep = kwargs.get("use_automatic_timestep", False)
         self.max_courant_number = kwargs.get("max_courant_number", 10)
+        self.ramp_dir = kwargs.get("ramp_dir")
+        if self.ramp_dir is None:
+            fpath = f"{os.path.abspath(os.path.dirname(__file__))}/outputs/{configuration}"
+            approach = "uniform_mesh" if uniform else "fixed_mesh"
+            self.ramp_dir = f"{fpath}/{approach}/level{self.ramp_level}/ramp1/hdf5"
 
         # Temporal discretisation
         self.timestep = 2.232
@@ -112,11 +117,8 @@ class ArrayOptions(FarmOptions):
         :kwarg fs: if not ``None``, the spun-up state will be
             projected into this :class:`FunctionSpace`.
         """
-        pwd = os.path.abspath(os.path.dirname(__file__))
-        approach = "uniform_mesh" if self.uniform else "fixed_mesh"
-        ramp_dir = f"{pwd}/outputs/{self.configuration}/{approach}/level{self.ramp_level}/ramp/hdf5"
         idx = int(np.round(self.ramp_time/self.simulation_export_time))
-        ramp_file = f"{ramp_dir}/Velocity2d_{idx:05d}"
+        ramp_file = f"{self.ramp_dir}/Velocity2d_{idx:05d}"
         if fs is None:
             label = "uniform" if self.uniform else "box"
             fpath = f"{self.resource_dir}/{self.configuration}"
@@ -129,7 +131,7 @@ class ArrayOptions(FarmOptions):
         print_output(f"Using ramp file {ramp_file}.h5")
         with DumbCheckpoint(ramp_file, mode=FILE_READ) as chk:
             chk.load(uv, name="uv_2d")
-        ramp_file = os.path.join(ramp_dir, f"Elevation2d_{idx:05d}")
+        ramp_file = f"{self.ramp_dir}/Elevation2d_{idx:05d}"
         if not os.path.exists(ramp_file + ".h5"):
             raise IOError(f"No ramp file found at {ramp_file}.h5")
         print_output(f"Using ramp file {ramp_file}.h5")
@@ -237,14 +239,14 @@ class ArrayOptions(FarmOptions):
         u, eta = Function(fs).split()
 
         if self.spunup:
+            u_ramp, eta_ramp = self.ramp(fs).split()
+            u.project(u_ramp)
+            eta.project(eta_ramp)
+        else:
             u.interpolate(as_vector([1.0e-08, 0.0]))
             x, y = SpatialCoordinate(self.mesh2d)
             X = 2 * x / self.domain_length  # Non-dimensionalised x
             eta.interpolate(-self.max_amplitude * X)
-        else:
-            u_ramp, eta_ramp = self.ramp(fs).split()
-            u.project(u_ramp)
-            eta.project(eta_ramp)
 
         solver_obj.assign_initial_conditions(uv=u, elev=eta)
 
