@@ -73,7 +73,7 @@ class ArrayOptions(FarmOptions):
         self.depth = 50.0
         P1 = get_functionspace(self.mesh2d, "CG", 1)
         self.quadratic_drag_coefficient = Constant(0.0025)
-        self.horizontal_velocity_scale = Constant(1.5)  # TODO: Should we use 4 m/s?
+        self.horizontal_velocity_scale = Constant(4.0)
         self.bathymetry2d = Function(P1, name="Bathymetry")
         self.bathymetry2d.assign(self.depth)
         self.base_viscosity = kwargs.get("base_viscosity", 10.0)
