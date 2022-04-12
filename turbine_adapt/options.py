@@ -13,6 +13,8 @@ class FarmOptions(ModelOptions2d):
     tidal farm problems.
     """
 
+    turbine_diameter = PositiveFloat(20.0).tag(config=False)
+    turbine_width = PositiveFloat(None, allow_none=True).tag(config=False)
     sea_water_density = PositiveFloat(
         1030.0,
         help="""
@@ -55,13 +57,6 @@ class FarmOptions(ModelOptions2d):
         Maximum tolerated mesh Reynolds number.
         """,
     ).tag(config=True)
-    target_mesh_reynolds_number = PositiveFloat(
-        None,
-        help="""
-        Target mesh Reynolds number.
-        """,
-        allow_none=True,
-    ).tag(config=True)
     break_even_wattage = NonNegativeFloat(
         0.0,
         help="""
@@ -101,36 +96,37 @@ class FarmOptions(ModelOptions2d):
         self.bnd_conditions = {}
 
     def apply_boundary_conditions(self, solver_obj):
-        """
-        Should be implemented in derived class.
-        """
-        pass
+        raise NotImplementedError("Should be implemented in derived class.")
 
     def apply_initial_conditions(self, solver_obj):
+        raise NotImplementedError("Should be implemented in derived class.")
+
+    @property
+    def velocity_correction(self):
         """
-        Should be implemented in derived class.
+        Correction to account for the fact that we are using an
+        at-the-turbine velocity as opposed to an upstream velocity.
+
+        See [Kramer and Piggott 2016], eq. (13).
         """
-        pass
+        if not self.correct_thrust:
+            return 1.0
+        c_T = self.thrust_coefficient
+        D = self.turbine_diameter
+        H = self.get_depth("turbine")
+        swept_area = pi * (D / 2) ** 2
+        return 0.5 * (1.0 + np.sqrt(1.0 - c_T * swept_area / (H * D)))
 
     @property
     def corrected_thrust_coefficient(self):
         """
         Correction to account for the fact that the thrust coefficient
         is based on an upstream velocity whereas we are using a depth
-        averaged at-the-turbine velocity (see [Kramer and Piggott 2016],
-        eq. (15)).
+        averaged at-the-turbine velocity.
+
+        See [Kramer and Piggott 2016], eq. (15).
         """
-        c_T = self.thrust_coefficient
-        if not self.correct_thrust:
-            return c_T
-        D = self.turbine_diameter
-        H = self.get_depth("turbine")
-        swept_area = pi * (D / 2) ** 2
-        cross_sectional_area = H * D
-        correction = (
-            4.0 / (1.0 + np.sqrt(1.0 - c_T * swept_area / cross_sectional_area)) ** 2
-        )
-        return c_T * correction
+        return self.thrust_coefficient / self.velocity_correction ** 2
 
     def create_tidal_farm(self, mesh=None):
         """
@@ -143,41 +139,17 @@ class FarmOptions(ModelOptions2d):
         assert hasattr(self, "farm_ids")
         assert len(self.farm_ids) > 0
         D = self.turbine_diameter
-        W = (
-            self.turbine_diameter
-            if not hasattr(self, "turbine_width")
-            else self.turbine_width
-        )
+        W = self.turbine_width or self.turbine_diameter
         footprint_area = D * W
-        farm_options = TidalTurbineFarmOptions()
-        if self.discrete_turbines:
-            farm_options.turbine_density = Constant(
-                1.0 / footprint_area, domain=self.mesh2d
-            )
-        else:
-            # NOTE: Assumes turbines aligned with xy-axes with
-            #       D and W corresponding to x and y axes, resp.
-            x, y = SpatialCoordinate(self.mesh2d)
-            farm_options.turbine_density = 0
-            for tag in self.farm_ids:
-                area = assemble(Constant(1.0, domain=self.mesh2d) * dx(tag))
-                _x, _y = assemble(x * dx(tag)) / area, assemble(y * dx(tag)) / area
-                q0, q1 = (x - _x) ** 2 / D**2, (y - _y) ** 2 / W**2
-                bump = conditional(
-                    And(lt(q0, 1), lt(q1, 1)),
-                    exp(1 - 1 / (1 - q0)) * exp(1 - 1 / (1 - q1)),
-                    0,
-                )
-                area = assemble(bump * dx)
-                farm_options.turbine_density = (
-                    farm_options.turbine_density + bump / area
-                )
-        farm_options.turbine_options.diameter = D
-        farm_options.turbine_options.thrust_coefficient = (
-            self.corrected_thrust_coefficient
-        )
-        farm_options.break_even_wattage = self.break_even_wattage
-        self.tidal_turbine_farms = {farm_id: farm_options for farm_id in self.farm_ids}
+        kw = dict(domain=self.mesh2d)
+        if not self.discrete_turbines:
+            raise NotImplementedError("Continuous turbine method not supported")
+        fo = TidalTurbineFarmOptions()
+        fo.turbine_density = Constant(1.0 / footprint_area, **kw)
+        fo.turbine_options.diameter = D
+        fo.turbine_options.thrust_coefficient = self.corrected_thrust_coefficient
+        fo.break_even_wattage = self.break_even_wattage
+        self.tidal_turbine_farms = {farm_id: fo for farm_id in self.farm_ids}
 
     def check_mesh_reynolds_number(self):
         """
@@ -186,22 +158,17 @@ class FarmOptions(ModelOptions2d):
         nu = self.horizontal_viscosity
         mesh = nu.function_space().mesh()
         u = self.horizontal_velocity_scale
-        fs = (
-            get_functionspace(mesh, "CG", 1)
-            if isinstance(nu, Constant)
-            else nu.function_space()
-        )
-        Re_h = Function(fs, name="Reynolds number")
+        P1 = get_functionspace(mesh, "CG", 1)
+        Re_h = Function(P1, name="Reynolds number")
+        # TODO: Would be better to use P0
         Re_h.project(mesh.delta_x * u / nu)
-        # Re_h.interpolate(mesh.delta_x*u/nu)
         Re_h_vec = Re_h.vector().gather()
         Re_h_min = Re_h_vec.min()
         Re_h_max = Re_h_vec.max()
         Re_h_mean = np.mean(Re_h_vec)
-        lg = lambda x: "<" if x < 1 else ">"
-        print_output("min(Re_h)  = {:11.4e} {:1s} 1".format(Re_h_min, lg(Re_h_min)))
-        print_output("max(Re_h)  = {:11.4e} {:1s} 1".format(Re_h_max, lg(Re_h_max)))
-        print_output("mean(Re_h) = {:11.4e} {:1s} 1".format(Re_h_mean, lg(Re_h_mean)))
+        print_output(f"min(Re_h)  = {Re_h_min:11.4e}")
+        print_output(f"max(Re_h)  = {Re_h_max:11.4e}")
+        print_output(f"mean(Re_h) = {Re_h_mean:11.4e}")
         return Re_h
 
     def enforce_mesh_reynolds_number(self):
@@ -212,14 +179,14 @@ class FarmOptions(ModelOptions2d):
         nu = self.horizontal_viscosity
         Re_h = self.check_mesh_reynolds_number()
         Re_h_max = self.max_mesh_reynolds_number
-        u = self.horizontal_velocity_scale
-        if u is None:
+        U = self.horizontal_velocity_scale
+        if U is None:
             raise ValueError(
                 "Cannot enforce mesh Reynolds number without characteristic velocity!"
             )
         print_output(f"Enforcing maximum mesh Reynolds number {Re_h_max:.2e}")
         h = nu.function_space().mesh().delta_x
-        nu.interpolate(conditional(Re_h >= Re_h_max, h * u / Re_h_max, nu))
+        nu.interpolate(conditional(Re_h >= Re_h_max, h * U / Re_h_max, nu))
 
     def get_depth(self, mode=None):
         if mode is None:
