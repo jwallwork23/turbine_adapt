@@ -1,6 +1,9 @@
 from turbine import *
 from options import ArrayOptions
+import pyadjoint
 
+
+pyadjoint.pause_annotation()
 
 # Parse arguments
 parser = Parser("test_cases/array/run_fixed_mesh.py")
@@ -20,15 +23,10 @@ parser.add_argument(
     action="store_true",
 )
 parser.add_argument(
-    "--uniform",
-    help="Use a uniform mesh",
-    action="store_true",
-)
-parser.add_argument(
     "--load_index",
     help="Optional index to load from HDF5",
     type=int,
-    default=None,
+    default=0,
 )
 parser.parse_setup()
 parsed_args = parser.parse_args()
@@ -43,7 +41,6 @@ ramp_dir = f"outputs/{config}/{approach}/level{ramp_level}/ramp{nproc}/hdf5"
 options = ArrayOptions(
     level=parsed_args.level,
     uniform=parsed_args.uniform,
-    mesh=mesh,
     configuration=config,
     ramp_dir=ramp_dir,
     ramp_level=ramp_level,
