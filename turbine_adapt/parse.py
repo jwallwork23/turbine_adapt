@@ -63,7 +63,14 @@ class Parser(argparse.ArgumentParser):
             "--ramp_level",
             help="Resolution level of spin-up run",
             type=nonnegative_int,
-            default=4,
+            default=0,
+        )
+        self.add_argument(
+            "--ramp_approach",
+            help="Meshing approach used for spin-up",
+            type=str,
+            choices=["fixed_mesh", "uniform_mesh"],
+            default="uniform_mesh",
         )
         self.add_argument(
             "--uniform",

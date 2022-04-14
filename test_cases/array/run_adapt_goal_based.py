@@ -1,4 +1,4 @@
-from thetis import print_output
+from thetis import print_output, COMM_WORLD
 from turbine_adapt import *
 from turbine_adapt.adapt import GoalOrientedTidalFarm
 from options import ArrayOptions

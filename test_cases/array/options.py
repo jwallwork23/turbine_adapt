@@ -120,7 +120,7 @@ class ArrayOptions(FarmOptions):
         idx = int(np.round(self.ramp_time/self.simulation_export_time))
         ramp_file = f"{self.ramp_dir}/Velocity2d_{idx:05d}"
         if fs is None:
-            label = "uniform" if self.uniform else "box"
+            label = "uniform" if "uniform" in self.ramp_dir else "box"
             fpath = f"{self.resource_dir}/{self.configuration}"
             mesh2d = Mesh(f"{fpath}/channel_{label}_{self.ramp_level}.msh")
             fs = get_functionspace(mesh2d, "DG", 1, vector=True) * get_functionspace(mesh2d, "DG", 1)
@@ -128,13 +128,13 @@ class ArrayOptions(FarmOptions):
         uv, elev = ramp.split()
         if not os.path.exists(ramp_file + ".h5"):
             raise IOError(f"No ramp file found at {ramp_file}.h5")
-        print_output(f"Using ramp file {ramp_file}.h5")
+        print_output(f"Using velocity ramp file {ramp_file}.h5")
         with DumbCheckpoint(ramp_file, mode=FILE_READ) as chk:
             chk.load(uv, name="uv_2d")
         ramp_file = f"{self.ramp_dir}/Elevation2d_{idx:05d}"
         if not os.path.exists(ramp_file + ".h5"):
             raise IOError(f"No ramp file found at {ramp_file}.h5")
-        print_output(f"Using ramp file {ramp_file}.h5")
+        print_output(f"Using elevation ramp file {ramp_file}.h5")
         with DumbCheckpoint(ramp_file, mode=FILE_READ) as chk:
             chk.load(elev, name="elev_2d")
         return ramp
