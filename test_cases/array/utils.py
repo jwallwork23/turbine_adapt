@@ -40,7 +40,7 @@ def get_data(config, modes, namespace, eps=1.0e-05):
             end_time += namespace.num_tidal_cycles * options.tide_time
 
     # Load data
-    if approach == "fixed_mesh":
+    if approach in ("fixed_mesh", "uniform_mesh"):
         run = f"level{level}"
     else:
         run = f"target{namespace.target_complexity:.0f}"
@@ -49,7 +49,7 @@ def get_data(config, modes, namespace, eps=1.0e-05):
     time = np.array([]).reshape((0, 1))
     for m in modes:
         ramp = m == "ramp"
-        input_dir = output_dir + "/ramp" if ramp else output_dir
+        input_dir = output_dir + "/ramp1" if ramp else output_dir  # TODO: avoid hard-code
         fname = f"{input_dir}/diagnostic_turbine.hdf5"
         if not os.path.exists(fname):
             print(f"File {fname} does not exist")

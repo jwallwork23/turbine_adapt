@@ -79,7 +79,12 @@ for config in configs:
     axes.grid(True)
     lines, labels = axes.get_legend_handles_labels()
     if len(ext) == 5:
-        l = "fixed" if approach == "fixed_mesh" else approach.split("_dwr")[0]
+        if approach == "fixed_mesh":
+            l = "fixed"
+        elif approach == "uniform_mesh":
+            l = "uniform"
+        else:
+            l = approach.split("_dwr")[0]
         l = ["\n".join([config.capitalize(), f"({l})"])]
     elif len(ext) == 1:
         l = [f"Column {int(ext)+1}"]
