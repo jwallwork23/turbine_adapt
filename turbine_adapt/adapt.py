@@ -288,6 +288,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         # Check for convergence (of loaded data)
         converged_reason = check_qoi_convergence() or check_cell_count_convergence()
         if converged_reason is not None:
+            self._final_run()
             print_output(msg.format(converged_reason, fp_iteration + 1))
             print_output(f"Energy output: {self.J/3.6e+09} MWh")
             return
