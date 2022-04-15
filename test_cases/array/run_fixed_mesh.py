@@ -81,7 +81,7 @@ if parsed_args.use_direct_solver:
         "pc_type": "lu",
         "pc_factor_mat_solver_type": "mumps",
     }
-if load_index is None:
+if load_index == 0:
     options.apply_initial_conditions(solver_obj)
 else:
     idx = parsed_args.load_index
