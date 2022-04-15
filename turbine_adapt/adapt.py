@@ -200,6 +200,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
     @pyadjoint.no_annotations
     def _final_run(self):
         print_output("\n--- Final forward run\n")
+        pyadjoint.get_working_tape().clear_tape()
         kw = dict(no_exports=False, compute_power=True)
         self.get_checkpoints(solver_kwargs=kw, run_final_subinterval=True)
 
