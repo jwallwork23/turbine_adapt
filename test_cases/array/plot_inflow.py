@@ -34,7 +34,12 @@ configs = ("aligned", "staggered")
 xvelocity = {}
 for config in configs:
     xvelocity[config] = []
-    run = "level5" if approach == "fixed_mesh" else "target10000"
+    if approach == "fixed_mesh":
+        run = "level5"
+    elif approach == "uniform_mesh":
+        run = "level0"
+    else:
+        run = "target10000"
     data_dir = f"outputs/{config}/{approach}/{run}/Velocity2d/extracts"
     for i in timesteps:
         f = pd.read_csv(f"{data_dir}/inflow_{i:06d}.csv", usecols=["x-velocity"])
