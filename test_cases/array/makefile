@@ -68,7 +68,7 @@ adaptive:
 	for approach in $(APPROACHES); do \
 		for config in $(CONFIGS); do \
 			for target in $(TARGETS); do \
-				python3 run_adapt_goal_based.py $$config -a $$approach --target_complexity $$target; \
+				python3 run_adapt.py $$config -a $$approach --target_complexity $$target; \
 			done; \
 		done; \
 	done

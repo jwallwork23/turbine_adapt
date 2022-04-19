@@ -5,7 +5,7 @@ from options import ArrayOptions
 
 
 # Parse arguments
-parser = Parser("test_cases/array/run_adapt_goal_based.py")
+parser = Parser("test_cases/array/run_adapt.py")
 parser.add_argument(
     "config",
     help="Name defining test case configuration",
