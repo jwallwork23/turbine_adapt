@@ -49,7 +49,7 @@ outputs = {
     "staggered": {"xv": [], "P": []},
 }
 for config in outputs:
-    di = f"outputs/{config}/isotropic_dwr/target10000/Velocity2d/extracts"
+    di = f"outputs/{config}/uniform_mesh/level0/Velocity2d/extracts"
     for i in range(num_timesteps):
 
         # Read velocity data for turbine region
