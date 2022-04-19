@@ -287,6 +287,19 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
         # Check for convergence (of loaded data)
         converged_reason = check_qoi_convergence() or check_cell_count_convergence()
+
+        # Load meshes, if requested
+        if load_index > 0:
+            for i in range(num_subintervals):
+                fname = f"{output_dir}/mesh_fp{fp_iteration}_{i}"
+                if not os.path.exists(fname + ".h5"):
+                    raise IOError(f"Cannot load mesh file {fname}.")
+                print_output(f"\n--- Loading plex {i+1}\n{fname}")
+                plex = PETSc.DMPlex().create()
+                plex.createFromFile(fname + ".h5")
+                self.meshes[i] = Mesh(plex)
+
+        # Do final run, if loaded data has already converged
         if converged_reason is not None:
             self._final_run()
             print_output(msg.format(converged_reason, fp_iteration + 1))
@@ -303,17 +316,6 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
             # Ramp up the target complexity
             target_ramp = ramp_complexity(base, target, fp_iteration)
-
-            # Load meshes, if requested
-            if load_index > 0 and fp_iteration == load_index:
-                for i in range(num_subintervals):
-                    fname = f"{output_dir}/mesh_fp{fp_iteration}_{i}"
-                    if not os.path.exists(fname + ".h5"):
-                        raise IOError(f"Cannot load mesh file {fname}.")
-                    print_output(f"\n--- Loading plex {i+1}\n{fname}")
-                    plex = PETSc.DMPlex().create()
-                    plex.createFromFile(fname + ".h5")
-                    self.meshes[i] = Mesh(plex)
 
             # Create metrics
             kw = dict(metric_parameters=dict(dm_plex_metric_verbosity=10))
@@ -334,15 +336,9 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                                 chk.load(metric, name="Metric")
                             loaded = True
                         except Exception:
-                            print_output(f"Cannot load metric data on mesh {i+1}")
-                            loaded = False
-                            break
+                            raise IOError(f"Cannot load metric data on mesh {i+1}")
                     elif loaded:
                         raise IOError("Remove partial metric data")
-                    else:
-                        break
-
-            # Otherwise, solve forward and adjoint
             if not loaded:
 
                 # Solve forward and adjoint on each subinterval
