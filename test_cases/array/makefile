@@ -125,6 +125,56 @@ plot_dofs:
 	done
 
 
+# --- Generate plots and data for paper
+
+paper: paper_plots paper_gather paper_power
+
+paper_plots:
+	python3 plot_mesh.py aligned
+	python3 plot_mesh.py staggered
+	python3 plot_inflow.py -a uniform_mesh
+	python3 plot_dofs.py -a isotropic_dwr
+	python3 plot_dofs.py -a isotropic_dwr --columns
+	python3 plot_dofs.py -a anisotropic_dwr
+	python3 plot_power.py aligned run -a uniform_mesh --level 0
+	python3 plot_power.py staggered run -a uniform_mesh --level 0
+	python3 plot_power.py aligned run -a isotropic_dwr --target_complexity 10000
+	python3 plot_power.py staggered run -a isotropic_dwr --target_complexity 10000
+	python3 plot_power.py aligned run -a anisotropic_dwr --target_complexity 10000
+	python3 plot_power.py staggered run -a anisotropic_dwr --target_complexity 10000
+	python3 plot_power.py staggered run -a isotropic_dwr --target_complexity 10000 -c 2
+	python3 plot_power.py staggered run -a isotropic_dwr --target_complexity 10000 -c 4
+	# python3 plot_power.py aligned both -a uniform_mesh --level 0 --num_tidal_cycles 3
+	# python3 plot_power.py staggered both -a uniform_mesh --level 0 --num_tidal_cycles 3
+
+paper_gather:
+	mkdir -p plots/paper
+	cp plots/aligned/aligned_domain.pdf plots/paper/
+	cp plots/staggered/staggered_domain.pdf plots/paper/
+	cp plots/inflow_velocity_uniform_mesh.pdf plots/paper/
+	cp plots/inflow_dynamic_pressure_uniform_mesh.pdf plots/paper/
+	cp plots/inflow_power_uniform_mesh.pdf plots/paper/
+	cp plots/isotropic_dwr_target10000_dofs.pdf plots/paper/
+	cp plots/staggered_isotropic_dwr_target10000_dofs.pdf plots/paper/
+	cp plots/anisotropic_dwr_target10000_dofs.pdf plots/paper/
+	cp plots/aligned/uniform_mesh/level0/aligned_uniform_mesh_power_output_column_level0_run.pdf plots/paper/
+	cp plots/staggered/uniform_mesh/level0/staggered_uniform_mesh_power_output_column_level0_run.pdf plots/paper/
+	cp plots/aligned/isotropic_dwr/target10000/aligned_isotropic_dwr_power_output_column_target10000_run.pdf plots/paper/
+	cp plots/staggered/isotropic_dwr/target10000/staggered_isotropic_dwr_power_output_column_target10000_run.pdf plots/paper/
+	cp plots/aligned/anisotropic_dwr/target10000/aligned_anisotropic_dwr_power_output_column_target10000_run.pdf plots/paper/
+	cp plots/staggered/anisotropic_dwr/target10000/staggered_anisotropic_dwr_power_output_column_target10000_run.pdf plots/paper/
+	# cp plots/aligned/uniform_mesh/level0/aligned_uniform_mesh_total_power_output_level0_both.pdf plots/paper/
+	# cp plots/staggered/uniform_mesh/level0/staggered_uniform_mesh_total_power_output_level0_both.pdf plots/paper/
+
+paper_power:
+	python3 compare_power.py aligned -a isotropic_dwr
+	python3 compare_power.py aligned -a anisotropic_dwr
+	python3 compare_power.py staggered -a isotropic_dwr
+	python3 compare_power.py staggered -a anisotropic_dwr
+	python3 compare_power.py staggered -a isotropic_dwr -c 2
+	python3 compare_power.py staggered -a isotropic_dwr -c 4
+
+
 # --- Cleanup
 
 clean:
