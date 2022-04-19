@@ -76,7 +76,9 @@ print(f"{head} relative L{p:.0f} error {rel_Lp_err}%, {err}%")
 # Relative energy analysis
 tol = 0.1
 ones = np.ones((5, 3, 5))
-power[approach] /= np.clip(np.outer(outputs[config]["P"], ones).reshape(1000, 15), tol, np.Inf)
+inflow = np.clip(np.outer(outputs[config]["P"], ones).reshape(1000, 15), tol, np.Inf)
+power["uniform_mesh"] /= inflow
+power[approach] /= inflow
 P = power["uniform_mesh"].reshape(nt, 5, 3)
 E = time_integrate(np.sum(P, axis=2), t)
 print(f"uniform_mesh   / {config:10s} relative energy       {np.round(E, 2)}, {np.round(np.sum(E), 2)}")
