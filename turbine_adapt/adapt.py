@@ -1,6 +1,8 @@
 from turbine_adapt import *
 from turbine_adapt.error_estimation import ErrorEstimator
 from thetis import *
+from thetis.diagnostics import VorticityCalculator2D
+from thetis.field_defs import field_metadata
 from firedrake.meshadapt import RiemannianMetric, adapt
 from firedrake_adjoint import pyadjoint
 from pyroteus.utility import File, Mesh
@@ -115,6 +117,8 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 )
                 uv_2d = solver_obj.fields.uv_2d
                 vorticity_calculator = VorticityCalculator2D(uv_2d, vorticity_2d)
+                if "vorticity_2d" in field_metadata:
+                    field_metadata.pop("vorticity_2d")
                 solver_obj.add_new_field(
                     vorticity_2d,
                     "vorticity_2d",
@@ -201,7 +205,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
     def _final_run(self):
         print_output("\n--- Final forward run\n")
         pyadjoint.get_working_tape().clear_tape()
-        kw = dict(no_exports=False, compute_power=True)
+        kw = dict(no_exports=False, compute_power=True, compute_vorticity=True)
         self.get_checkpoints(solver_kwargs=kw, run_final_subinterval=True)
 
     def fixed_point_iteration(self, **parsed_args):
