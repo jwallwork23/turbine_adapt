@@ -144,8 +144,7 @@ paper_plots:
 	python3 plot_power.py staggered run -a anisotropic_dwr --target_complexity 10000
 	python3 plot_power.py staggered run -a isotropic_dwr --target_complexity 10000 -c 2
 	python3 plot_power.py staggered run -a isotropic_dwr --target_complexity 10000 -c 4
-	# python3 plot_power.py aligned both -a uniform_mesh --level 0 --num_tidal_cycles 3
-	# python3 plot_power.py staggered both -a uniform_mesh --level 0 --num_tidal_cycles 3
+	python3 plot_power.py {aligned,staggered} both -a fixed_mesh --level 1 --num_tidal_cycles 3
 
 paper_gather:
 	mkdir -p plots/paper
@@ -163,8 +162,7 @@ paper_gather:
 	cp plots/staggered/isotropic_dwr/target10000/staggered_isotropic_dwr_power_output_column_target10000_run.pdf plots/paper/
 	cp plots/aligned/anisotropic_dwr/target10000/aligned_anisotropic_dwr_power_output_column_target10000_run.pdf plots/paper/
 	cp plots/staggered/anisotropic_dwr/target10000/staggered_anisotropic_dwr_power_output_column_target10000_run.pdf plots/paper/
-	# cp plots/aligned/uniform_mesh/level0/aligned_uniform_mesh_total_power_output_level0_both.pdf plots/paper/
-	# cp plots/staggered/uniform_mesh/level0/staggered_uniform_mesh_total_power_output_level0_both.pdf plots/paper/
+	cp plots/aligned_staggered/fixed_mesh/level1/aligned_staggered_fixed_mesh_total_power_output_level1_both.pdf plots/paper/
 
 paper_power:
 	python3 compare_power.py aligned -a isotropic_dwr
