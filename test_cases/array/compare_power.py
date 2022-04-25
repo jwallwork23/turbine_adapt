@@ -52,8 +52,8 @@ head = f"{approach:17s}/ {config:10s}"
 Ph = power[approach].reshape(nt, 5, 3)
 Eh = time_integrate(np.sum(Ph, axis=2), t)
 print(f"{head} {'energy':21s} {np.round(Eh, 4)},  {np.round(np.sum(Eh), 4)}")
-err = np.round(100 * np.abs((E - Eh) / E), 1)
-overall = np.round(100 * np.abs((np.sum(E) - np.sum(Eh)) / np.sum(E)), 1)
+err = np.round(100 * (Eh - E) / E, 1)
+overall = np.round(100 * (np.sum(Eh) - np.sum(E)) / np.sum(E), 1)
 print(f"{head} {'energy error':21s} {err}%, {overall}%")
 
 
@@ -86,6 +86,6 @@ head = f"{approach:17s}/ {config:10s}"
 Ph = power[approach].reshape(nt, 5, 3)
 Eh = time_integrate(np.sum(Ph, axis=2), t)
 print(f"{head} {'relative energy':21s} {np.round(Eh, 4)},  {np.round(np.sum(Eh), 4)}")
-err = np.round(100 * np.abs((E - Eh) / E), 1)
-overall = np.round(100 * np.abs((np.sum(E) - np.sum(Eh)) / np.sum(E)), 1)
+err = np.round(100 * (Eh - E) / E, 1)
+overall = np.round(100 * (np.sum(Eh) - np.sum(E)) / np.sum(E), 1)
 print(f"{head} relative energy error {err}%, {overall}%")
