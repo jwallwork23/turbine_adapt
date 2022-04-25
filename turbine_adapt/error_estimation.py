@@ -31,9 +31,10 @@ class ErrorEstimator(object):
         """
         self.options = options
         self.mesh = mesh or options.mesh2d
-        self.P0 = FunctionSpace(self.mesh, "DG", 0)
+        self.P0 = get_functionspace(self.mesh, "DG", 0)
         self.p0test = TestFunction(self.P0)
         self.p0trial = TrialFunction(self.P0)
+        self.P1 = get_functionspace(self.mesh, "CG", 1)
         self.P1_ten = TensorFunctionSpace(self.mesh, "CG", 1)
         self.h = CellSize(self.mesh)
         self.n = FacetNormal(self.mesh)
@@ -627,7 +628,7 @@ class ErrorEstimator(object):
         return [interpolate(L ** p, self.P1) ** (1 / p) for L in laps]
 
     @PETSc.Log.EventDecorator("ErrorEstimator.recover_hessians")
-    def recover_hessians(self, uv, elev, method="Clement"):
+    def recover_hessians(self, uv, elev, method="L2"):
         """
         Recover the Hessian of solution
         tuple `(uv, elev)`.
