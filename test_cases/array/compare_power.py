@@ -47,11 +47,11 @@ nt = len(t)
 # Energy analysis
 P = power["uniform_mesh"].reshape(nt, 5, 3)
 E = time_integrate(np.sum(P, axis=2), t)
-print(f"uniform_mesh   / {config:10s} {'energy':21s} {np.round(E, 2)},  {np.round(np.sum(E), 2)}")
+print(f"uniform_mesh   / {config:10s} {'energy':21s} {np.round(E, 4)},  {np.round(np.sum(E), 4)}")
 head = f"{approach:17s}/ {config:10s}"
 Ph = power[approach].reshape(nt, 5, 3)
 Eh = time_integrate(np.sum(Ph, axis=2), t)
-print(f"{head} {'energy':21s} {np.round(Eh, 2)},  {np.round(np.sum(Eh), 2)}")
+print(f"{head} {'energy':21s} {np.round(Eh, 4)},  {np.round(np.sum(Eh), 4)}")
 err = np.round(100 * np.abs((E - Eh) / E), 1)
 overall = np.round(100 * np.abs((np.sum(E) - np.sum(Eh)) / np.sum(E)), 1)
 print(f"{head} {'energy error':21s} {err}%, {overall}%")
@@ -81,11 +81,11 @@ power["uniform_mesh"] /= inflow
 power[approach] /= inflow
 P = power["uniform_mesh"].reshape(nt, 5, 3)
 E = time_integrate(np.sum(P, axis=2), t)
-print(f"uniform_mesh   / {config:10s} {'relative energy':21s} {np.round(E, 2)},  {np.round(np.sum(E), 2)}")
+print(f"uniform_mesh   / {config:10s} {'relative energy':21s} {np.round(E, 4)},  {np.round(np.sum(E), 4)}")
 head = f"{approach:17s}/ {config:10s}"
 Ph = power[approach].reshape(nt, 5, 3)
 Eh = time_integrate(np.sum(Ph, axis=2), t)
-print(f"{head} {'relative energy':21s} {np.round(Eh, 2)},  {np.round(np.sum(Eh), 2)}")
+print(f"{head} {'relative energy':21s} {np.round(Eh, 4)},  {np.round(np.sum(Eh), 4)}")
 err = np.round(100 * np.abs((E - Eh) / E), 1)
 overall = np.round(100 * np.abs((np.sum(E) - np.sum(Eh)) / np.sum(E)), 1)
 print(f"{head} relative energy error {err}%, {overall}%")
