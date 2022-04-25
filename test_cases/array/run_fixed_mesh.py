@@ -1,8 +1,10 @@
 from turbine import *
 from options import ArrayOptions
 import pyadjoint
+import datetime
 
 
+print_output(f"Start time: {datetime.datetime.now()}")
 pyadjoint.pause_annotation()
 
 # Parse arguments
@@ -92,3 +94,4 @@ else:
 solver_obj.iterate(
     update_forcings=options.update_forcings, export_func=options.export_func
 )
+print_output(f"End time: {datetime.datetime.now()}")

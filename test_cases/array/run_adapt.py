@@ -2,7 +2,10 @@ from thetis import print_output, COMM_WORLD
 from turbine_adapt import *
 from turbine_adapt.adapt import GoalOrientedTidalFarm
 from options import ArrayOptions
+import datetime
 
+
+print_output(f"Start time: {datetime.datetime.now()}")
 
 # Parse arguments
 parser = Parser("test_cases/array/run_adapt.py")
@@ -60,3 +63,4 @@ tidal_farm = GoalOrientedTidalFarm(
     options, root_dir, num_meshes, qoi_farm_ids=qoi_farm_ids
 )
 tidal_farm.fixed_point_iteration(**parsed_args)
+print_output(f"End time: {datetime.datetime.now()}")
