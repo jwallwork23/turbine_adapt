@@ -71,7 +71,7 @@ for i, (key, dof) in enumerate(dofs.items()):
 axes.set_xticks(ticks)
 axes.set_xticklabels(ticklabels)
 axes.set_xlim([ticks[0], ticks[-1]])
-axes.set_ylim([0, 900])
+axes.set_ylim([0, 750])
 axes.set_xlabel(r"Time/$T_{\mathrm{tide}}$")
 axes.set_ylabel(r"DoF count ($\times10^3$)")
 axes.legend(fontsize=16)
