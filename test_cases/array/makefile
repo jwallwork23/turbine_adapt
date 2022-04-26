@@ -134,7 +134,6 @@ paper_plots:
 	python3 plot_mesh.py staggered
 	python3 plot_inflow.py -a uniform_mesh
 	python3 plot_dofs.py -a isotropic_dwr
-	python3 plot_dofs.py -a isotropic_dwr --columns
 	python3 plot_dofs.py -a anisotropic_dwr
 	python3 plot_power.py aligned run -a uniform_mesh --level 0
 	python3 plot_power.py staggered run -a uniform_mesh --level 0
@@ -142,8 +141,6 @@ paper_plots:
 	python3 plot_power.py staggered run -a isotropic_dwr --target_complexity 10000
 	python3 plot_power.py aligned run -a anisotropic_dwr --target_complexity 10000
 	python3 plot_power.py staggered run -a anisotropic_dwr --target_complexity 10000
-	python3 plot_power.py staggered run -a isotropic_dwr --target_complexity 10000 -c 2
-	python3 plot_power.py staggered run -a isotropic_dwr --target_complexity 10000 -c 4
 	python3 plot_power.py {aligned,staggered} both -a fixed_mesh --level 1 --num_tidal_cycles 3
 
 paper_gather:
@@ -154,7 +151,6 @@ paper_gather:
 	cp plots/inflow_dynamic_pressure_uniform_mesh.pdf plots/paper/
 	cp plots/inflow_power_uniform_mesh.pdf plots/paper/
 	cp plots/isotropic_dwr_target10000_dofs.pdf plots/paper/
-	cp plots/staggered_isotropic_dwr_target10000_dofs.pdf plots/paper/
 	cp plots/anisotropic_dwr_target10000_dofs.pdf plots/paper/
 	cp plots/aligned/uniform_mesh/level0/aligned_uniform_mesh_power_output_column_level0_run.pdf plots/paper/
 	cp plots/staggered/uniform_mesh/level0/staggered_uniform_mesh_power_output_column_level0_run.pdf plots/paper/
