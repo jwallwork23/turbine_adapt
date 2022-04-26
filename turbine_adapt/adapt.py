@@ -6,6 +6,7 @@ from thetis.field_defs import field_metadata
 from firedrake.meshadapt import RiemannianMetric, adapt
 from firedrake_adjoint import pyadjoint
 from pyroteus.utility import File, Mesh
+import datetime
 
 
 __all__ = ["GoalOrientedTidalFarm"]
@@ -312,6 +313,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
         # Enter the fixed point iteration loop
         while fp_iteration <= maxiter:
+            print_output(f"Start time for fp_iteration {fp_iteration}: {datetime.datetime.now()}")
             outfiles = AttrDict({})
             if fp_iteration < miniter:
                 converged_reason = None
