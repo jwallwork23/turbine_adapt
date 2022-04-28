@@ -21,6 +21,11 @@ parser.add_argument(
     help="Turbine columns to use in QoI",
     default=[0, 1, 2, 3, 4],
 )
+parser.add_argument(
+    "--no-final-run",
+    help="Skip the final forward run",
+    action="store_true",
+)
 parser.parse_setup()
 parser.parse_convergence_criteria()
 parser.parse_metric_parameters()
