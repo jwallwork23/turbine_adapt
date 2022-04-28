@@ -196,7 +196,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 turbine_drag.assign(ct, subset=self[i].cell_subset(tag))
 
             def qoi(sol, t):
-                u, eta = sol["swe2d"].split()
+                u, eta = split(sol["swe2d"])
                 j = assemble(turbine_drag * pow(sqrt(dot(u, u)), 3) * dx)
                 if pyadjoint.tape.annotate_tape():
                     j.block_variable.adj_value = 1.0
@@ -241,6 +241,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             "base_complexity",
             "flux_form",
             "norm_order",
+            "no_final_run",
         }
         if not expected.issubset(set(parsed_args.keys())):
             missing = expected.difference(set(parsed_args.keys()))
@@ -260,6 +261,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         num_subintervals = self.num_subintervals
         timesteps = [dt] * num_subintervals
         p = parsed_args.norm_order
+        no_final_run = parsed_args.no_final_run
         if COMM_WORLD.size > 1:
             raise NotImplementedError("Mmg2d only supports serial mesh adaptation")
 
@@ -313,7 +315,9 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
         # Do final run, if loaded data has already converged
         if converged_reason is not None:
-            self._final_run()
+            if not no_final_run:
+                print(f"converged_reason: {converged_reason}")
+                self._final_run()
             print_output(msg.format(converged_reason, fp_iteration + 1))
             print_output(f"Energy output: {self.J/3.6e+09} MWh")
             return
@@ -359,12 +363,16 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                     print_output(f"\n--- Forward-adjoint sweep {fp_iteration}\n")
                     solutions = self.solve_adjoint()
                 else:
-                    self._final_run()
+                    if not no_final_run:
+                        print(f"converged_reason: {converged_reason}")
+                        self._final_run()
 
                 # Check for QoI convergence
                 converged_reason = converged_reason or check_qoi_convergence()
                 if converged_reason is not None:
-                    self._final_run()
+                    if not no_final_run:
+                        print(f"converged_reason: {converged_reason}")
+                        self._final_run()
                 qois.append(self.J)
                 np.save(f"{output_dir}/J_progress.npy", qois)
 
