@@ -4,6 +4,7 @@ from thetis import *
 from thetis.diagnostics import VorticityCalculator2D
 from thetis.field_defs import field_metadata
 from firedrake.meshadapt import RiemannianMetric, adapt
+from firedrake.petsc import PETSc
 from firedrake_adjoint import pyadjoint
 from pyroteus.utility import File, Mesh
 import datetime
@@ -18,6 +19,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
     adaptive simulations of tidal farm modelling problems.
     """
 
+    @PETSc.Log.EventDecorator()
     def __init__(self, options, root_dir, num_subintervals, **kwargs):
         """
         :arg options: :class:`FarmOptions` encapsulating the problem
@@ -60,6 +62,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             qoi_type="time_integrated",
         )
 
+    @PETSc.Log.EventDecorator()
     def get_function_spaces(self, mesh):
         """
         Get the mixed finite element space for a given mesh.
@@ -80,6 +83,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
             )
         }
 
+    @PETSc.Log.EventDecorator()
     def get_solver(self):
         options = self.options
 
@@ -158,6 +162,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
         return solver
 
+    @PETSc.Log.EventDecorator()
     def get_initial_condition(self):
         """
         Near-zero initial velocity and an
@@ -173,6 +178,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         eta.project(eta_ramp)
         return {"swe2d": q}
 
+    @PETSc.Log.EventDecorator()
     def get_qoi(self, i):
         """
         Extract a function for evaluating the quantity of interest (QoI) on
@@ -202,6 +208,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
 
         return qoi
 
+    @PETSc.Log.EventDecorator()
     @pyadjoint.no_annotations
     def _final_run(self):
         print_output("\n--- Final forward run\n")
@@ -209,6 +216,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
         kw = dict(no_exports=False, compute_power=True, compute_vorticity=True)
         self.get_checkpoints(solver_kwargs=kw, run_final_subinterval=True)
 
+    @PETSc.Log.EventDecorator()
     def fixed_point_iteration(self, **parsed_args):
         """
         Apply a goal-oriented metric-based mesh adaptation
@@ -465,6 +473,7 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 viewer(mesh.topology_dm)
 
             # Increment
+            print_output(f"End time for fp_iteration {fp_iteration}: {datetime.datetime.now()}")
             fp_iteration += 1
         print_output(msg.format(converged_reason, fp_iteration + 1))
         print_output(f"Energy output: {self.J/3.6e+09} MWh")
