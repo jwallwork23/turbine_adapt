@@ -147,7 +147,6 @@ class GoalOrientedTidalFarm(GoalOrientedMeshSeq):
                 solver_obj.exporters["vtk"].set_next_export_ix(i_export)
 
             # Setup QoI
-            self.J = 0
             qoi = self.get_qoi(i)
 
             def update_forcings(t):
