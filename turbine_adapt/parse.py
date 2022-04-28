@@ -239,4 +239,4 @@ class Parser(argparse.ArgumentParser):
         )
 
     def parse_args(self):
-        return AttrDict(vars(super().parse_args()))
+        return AttrDict(vars(super().parse_known_args()[0]))
